@@ -1,5 +1,7 @@
 # 🌌 Pass Planner | User-unfriendly Highly-customizable Light-weight Low-key FRC Path Generation Tool
 
+![Pass Planner UI](tools/screenshot.png) <!-- 💡 替换为你的网页截图路径 -->
+
 Welcome to the **Pass Planner** repository! This project represents a modern, data-driven, and highly decoupled software architecture for FIRST Robotics Competition (FRC). 
 
 We have successfully separated the "Tactical Brain" (Trajectory Generation & Targeting) from the "Physical Muscle" (Phoenix 6 Hardware Control), resulting in a zero-configuration, highly robust Autonomous system.
@@ -45,6 +47,20 @@ While `PassPlanner` acts as the brain, we've built a modular suite of commands t
 * **`AutoMoveOpen` / `AutoMoveClosed`**: Lightweight, highly customizable primitives for pure coordinate-to-coordinate driving. Perfect for creating simpler, on-the-fly paths without needing a full JSON file!
 
 ---
+
+## 🎥 Simulation Showcase
+
+Watch the Pass Planner brain and the `AutoMove` suite in action within the WPILib / AdvantageScope simulation environment!
+
+### 🤖 Autonomous Execution
+*(The robot executing a preloaded JSON trajectory perfectly parsed from the PassPlanner tool)*
+
+<video src="tools/auto_sim.mp4" width="100%" controls autoplay loop muted></video>
+
+### 🎮 Manual / Dynamic Takeover
+*(Dynamic routing, on-the-fly Reef targeting, and momentum preservation during Teleop)*
+
+<video src="tools/manual_sim.mp4" width="100%" controls autoplay loop muted></video>
 
 ## 📂 Repository Structure
 
