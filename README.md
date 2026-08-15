@@ -55,12 +55,12 @@ Watch the Pass Planner brain and the `AutoMove` suite in action within the WPILi
 ### 🤖 Autonomous Execution
 *(The robot executing a preloaded JSON trajectory perfectly parsed from the PassPlanner tool)*
 
-<video src="tools/auto_sim.mp4" width="100%" controls autoplay loop muted></video>
+<video src="https://github.com/Sitanshan/Pass-Planner/blob/main/tools/auto_sim.mp4" width="100%" controls autoplay loop muted></video>
 
 ### 🎮 Manual / Dynamic Takeover
 *(Dynamic routing, on-the-fly Reef targeting, and momentum preservation during Teleop)*
 
-<video src="tools/manual_sim.mp4" width="100%" controls autoplay loop muted></video>
+<video src="https://github.com/Sitanshan/Pass-Planner/blob/main/tools/manual_sim.mp4" width="100%" controls autoplay loop muted></video>
 
 ---
 
