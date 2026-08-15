@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>FRC Pass Planner v19.2</title>
+    <title>FRC Pass Planner v19.3 (Dynamic Scale)</title>
     <style>
         /* ==========================================
            🌌 赛博朋克 霓虹科技感主题 (Cyberpunk Neon Theme)
@@ -40,6 +40,14 @@
             border: 2px solid var(--neon-cyan); 
             box-shadow: 0 0 15px rgba(0, 243, 255, 0.3), inset 0 0 20px rgba(0, 243, 255, 0.1); 
             border-radius: 6px; 
+            
+            /* 🚀 核心修复：允许边框自适应紧贴画布，彻底消灭未覆盖的黑边 */
+            max-width: 100%;
+            max-height: calc(100vh - 100px);
+            width: auto;
+            height: auto;
+            display: block;
+            margin: 0 auto; /* 如果因屏幕太矮导致整体缩小，让它在左侧优雅居中 */
         }
 
         .tip { 
@@ -215,28 +223,48 @@
 
     <div class="left-panel">
         <canvas id="fieldCanvas" width="323" height="662"></canvas>
-        <div class="tip" id="statusTip">SYSTEM.READY // PASS PLANNER<br><span style="color:#888">Y=0 Driver Station | X=16.54 Far End</span></div>
+        <div class="tip" id="statusTip">SYSTEM.READY // PASS PLANNER<br><span style="color:#888">Y=0 Driver Station | X=17.55 Far End</span></div>
     </div>
 
     <div class="right-panel">
         <div class="controls-card">
             <div class="control-row">
-                <div class="control-group"><label>🏟️ FIELD：</label><select id="fieldSelect"><option value="field2026.png">2026 REEFSCAPE</option><option value="field2025.png">2025 CRESENDO</option><option value="field_custom.png">CUSTOM</option></select></div>
+                <div class="control-group">
+                    <label>🏟️ FIELD：</label>
+                    <select id="fieldSelect">
+                        <option value="field2026.png">2026 REEFSCAPE</option>
+                        <option value="field2025.png">2025 CRESENDO</option>
+                        <option value="field_custom.png">CUSTOM</option>
+                    </select>
+                </div>
                 <div class="divider"></div>
-                <div class="control-group"><label>🤖 SIZE：</label><input type="number" id="robotLength" value="0.76" step="0.01" style="width: 50px;" oninput="drawPoints()"><span style="color: #666;">×</span><input type="number" id="robotWidth" value="0.76" step="0.01" style="width: 50px;" oninput="drawPoints()"></div>
-                
+                <div class="control-group" title="Input Field Length and Width in Meters">
+                    <label>🗺️ DIM (m)：</label>
+                    <input type="number" id="fieldLength" value="17.55" step="0.01" style="width: 55px;" oninput="updateFieldSize()">
+                    <span style="color: #666;">×</span>
+                    <input type="number" id="fieldWidth" value="8.05" step="0.01" style="width: 55px;" oninput="updateFieldSize()">
+                </div>
                 <div class="divider"></div>
+                <div class="control-group">
+                    <label>🤖 ROBOT：</label>
+                    <input type="number" id="robotLength" value="0.76" step="0.01" style="width: 50px;" oninput="drawPoints()">
+                    <span style="color: #666;">×</span>
+                    <input type="number" id="robotWidth" value="0.76" step="0.01" style="width: 50px;" oninput="drawPoints()">
+                </div>
+            </div>
+            
+            <div class="control-row">
                 <div class="control-group" title="数值越大，曲线越饱满；数值越小，曲线越紧贴直线 (范围 0.01 ~ 1.5)">
                     <label style="color:var(--neon-cyan); text-shadow: 0 0 5px var(--neon-cyan);">🪢 TENSION：</label>
                     <input type="range" id="curveWeightSlider" min="0.01" max="1.5" step="0.01" value="0.4" oninput="syncCurveWeight('slider')">
                     <input type="number" id="curveWeightInput" value="0.4" step="0.01" style="width: 50px;" oninput="syncCurveWeight('input')">
                 </div>
-
                 <div style="flex: 1;"></div> 
                 <button class="btn-pid" onclick="openPidModal()">⚙️ BRAKE PID</button>
                 <button class="btn-sim" id="btnSimulate" onclick="toggleSimulation()">▶️ SIMULATE</button>
                 <button class="btn-danger" onclick="clearPoints()">🗑️ PURGE ALL</button>
             </div>
+            
             <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); width: 100%; margin: 5px 0;">
             <div class="control-row">
                 <div class="control-group"><label>📝 ID：</label><input type="text" id="saveNameInput" placeholder="Auto_Path" style="width: 120px;"><button class="btn-warning" onclick="savePathToLocal()">💾 CACHE</button></div>
@@ -271,8 +299,8 @@
         <div class="modal-card">
             <h3 id="modalTitle">WAYPOINT DATA</h3>
             <div class="form-row">
-                <div class="form-group"><label>X Pos (0~16.54m):</label><input type="number" id="inputX" step="0.01"></div>
-                <div class="form-group"><label>Y Pos (0~8.07m):</label><input type="number" id="inputY" step="0.01"></div>
+                <div class="form-group"><label id="lblXPos">X Pos (m):</label><input type="number" id="inputX" step="0.01"></div>
+                <div class="form-group"><label id="lblYPos">Y Pos (m):</label><input type="number" id="inputY" step="0.01"></div>
             </div>
             
             <div class="form-row">
@@ -309,15 +337,49 @@
         const inputDisconnectNext = document.getElementById('inputDisconnectNext'); 
         const btnDeletePoint = document.getElementById('btnDeletePoint'); const btnMoveUp = document.getElementById('btnMoveUp'); const btnMoveDown = document.getElementById('btnMoveDown');
         const pidModal = document.getElementById('pidModal'); const pidP = document.getElementById('pidP'); const pidI = document.getElementById('pidI'); const pidD = document.getElementById('pidD');
-        const FIELD_WIDTH = 17.55; const FIELD_HEIGHT = 8.05; const LOCAL_STORAGE_KEY = "frc_architect_paths";
+        
+        // 🚀 核心修改：将 const 修改为 let 以支持动态修改
+        let FIELD_WIDTH = 17.55; let FIELD_HEIGHT = 8.05; 
+        const LOCAL_STORAGE_KEY = "frc_architect_paths";
 
         let keyWaypoints = []; let pathSegments = []; let hoveredIndex = -1; let activeEditIndex = -1; let isDragging = false; let draggedIndex = -1; let dragStartX = 0; let dragStartY = 0; let hasDragged = false; 
         let globalBrakePID = { p: 4.5, i: 0.1, d: 0.1 }; let globalCurveWeight = 0.4; 
         let isSimulating = false; let simPoints = []; let simTotalTime = 0; let simStartTime = 0; let animFrameId = null;
         let targetDirectoryHandle = null; const bgImg = new Image();
 
-        function getFieldCoords(mouseX, mouseY) { return { x: FIELD_WIDTH - (mouseY / canvas.height) * FIELD_WIDTH, y: FIELD_HEIGHT - (mouseX / canvas.width) * FIELD_HEIGHT }; }
-        function getCanvasCoords(ptX, ptY) { return { px: canvas.width - (ptY / FIELD_HEIGHT) * canvas.width, py: canvas.height - (ptX / FIELD_WIDTH) * canvas.height }; }
+        // 🚀 核心修改：根据真实的 HTML DOM ClientRect 进行鼠标位置换算，避免 CSS 拉伸时发生坐标偏移
+        function getFieldCoords(mouseX, mouseY, rect) { 
+            return { 
+                x: FIELD_WIDTH - (mouseY / rect.height) * FIELD_WIDTH, 
+                y: FIELD_HEIGHT - (mouseX / rect.width) * FIELD_HEIGHT 
+            }; 
+        }
+        function getCanvasCoords(ptX, ptY) { 
+            return { 
+                px: canvas.width - (ptY / FIELD_HEIGHT) * canvas.width, 
+                py: canvas.height - (ptX / FIELD_WIDTH) * canvas.height 
+            }; 
+        }
+
+        // 🚀 新增功能：动态更新场地尺寸和画布分辨率比
+        function updateFieldSize() {
+            FIELD_WIDTH = parseFloat(document.getElementById('fieldLength').value) || 17.55;
+            FIELD_HEIGHT = parseFloat(document.getElementById('fieldWidth').value) || 8.05;
+            
+            // 动态调整画布真实高度，基于宽度323px去按真实的物理比例缩放。
+            // 这样能确保画布坐标系X和Y物理间距对等，机器人在绘制旋转时绝对不会因为比例拉伸而变形！
+            canvas.height = canvas.width * (FIELD_WIDTH / FIELD_HEIGHT);
+            
+            // 更新 UI 和提示
+            statusTip.innerHTML = `SYSTEM.READY // PASS PLANNER<br><span style="color:#888">Y=0 Driver Station | X=${FIELD_WIDTH.toFixed(2)} Far End</span>`;
+            document.getElementById('lblXPos').innerText = `X Pos (0~${FIELD_WIDTH.toFixed(2)}m):`;
+            document.getElementById('lblYPos').innerText = `Y Pos (0~${FIELD_HEIGHT.toFixed(2)}m):`;
+            
+            if(bgImg.complete) {
+                recalculatePath();
+                drawPoints();
+            }
+        }
 
         const DB_NAME = "PassPlannerDB"; const STORE_NAME = "SysHandles";
         function initDB() { return new Promise((res, rej) => { let req = indexedDB.open(DB_NAME, 1); req.onupgradeneeded = e => e.target.result.createObjectStore(STORE_NAME); req.onsuccess = e => res(e.target.result); req.onerror = rej; }); }
@@ -325,7 +387,9 @@
         async function getDirHandleFromDB() { let db = await initDB(); return new Promise(res => { let req = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get('deployDir'); req.onsuccess = e => res(e.target.result); req.onerror = () => res(null); }); }
 
         window.onload = () => { 
-            refreshSavedPathsDropdown(); bgImg.src = fieldSelect.value; 
+            refreshSavedPathsDropdown(); 
+            bgImg.src = fieldSelect.value; 
+            updateFieldSize(); // 初始化画布比例
             getDirHandleFromDB().then(handle => { if (handle) { targetDirectoryHandle = handle; document.getElementById('btnBindFolder').innerText = "✅ BOUND: " + handle.name; document.getElementById('btnBindFolder').style.backgroundColor = "rgba(0, 243, 255, 0.2)"; document.getElementById('folderStatus').innerText = "Directory recovered. Grant permission if prompted on first export."; document.getElementById('folderStatus').style.color = "#00f3ff"; } });
         };
         fieldSelect.addEventListener('change', () => { bgImg.src = fieldSelect.value; }); bgImg.onload = () => { drawPoints(); };
@@ -356,8 +420,33 @@
         function closePidModal() { pidModal.style.display = "none"; }
         function savePidData() { globalBrakePID.p = parseFloat(pidP.value) || 0; globalBrakePID.i = parseFloat(pidI.value) || 0; globalBrakePID.d = parseFloat(pidD.value) || 0; closePidModal(); recalculatePath(); }
 
-        canvas.addEventListener('mousemove', function(event) { if(isSimulating) return; const rect = canvas.getBoundingClientRect(); let fieldPos = getFieldCoords(event.clientX - rect.left, event.clientY - rect.top); if (isDragging && draggedIndex !== -1) { if (!hasDragged && Math.hypot(fieldPos.x - dragStartX, fieldPos.y - dragStartY) > 0.05) { hasDragged = true; canvas.style.cursor = 'grabbing'; } if (hasDragged) { keyWaypoints[draggedIndex].x = parseFloat(Math.max(0, Math.min(FIELD_WIDTH, fieldPos.x)).toFixed(2)); keyWaypoints[draggedIndex].y = parseFloat(Math.max(0, Math.min(FIELD_HEIGHT, fieldPos.y)).toFixed(2)); recalculatePath(); } return; } let found = -1; for (let i = 0; i < keyWaypoints.length; i++) { if (Math.hypot(keyWaypoints[i].x - fieldPos.x, keyWaypoints[i].y - fieldPos.y) < 0.35) { found = i; break; } } if (found !== hoveredIndex) { hoveredIndex = found; canvas.style.cursor = (hoveredIndex !== -1) ? 'grab' : 'crosshair'; drawPoints(); } });
-        canvas.addEventListener('mousedown', function(event) { if(isSimulating) return; const rect = canvas.getBoundingClientRect(); let fieldPos = getFieldCoords(event.clientX - rect.left, event.clientY - rect.top); if (hoveredIndex !== -1) { isDragging = true; draggedIndex = hoveredIndex; dragStartX = fieldPos.x; dragStartY = fieldPos.y; hasDragged = false; } else { openModalForNewPoint(parseFloat(fieldPos.x.toFixed(2)), parseFloat(fieldPos.y.toFixed(2))); } });
+        canvas.addEventListener('mousemove', function(event) { 
+            if(isSimulating) return; 
+            const rect = canvas.getBoundingClientRect(); 
+            // 🚀 确保传入真实的 rect 数据以进行等比计算
+            let fieldPos = getFieldCoords(event.clientX - rect.left, event.clientY - rect.top, rect); 
+            
+            if (isDragging && draggedIndex !== -1) { 
+                if (!hasDragged && Math.hypot(fieldPos.x - dragStartX, fieldPos.y - dragStartY) > 0.05) { hasDragged = true; canvas.style.cursor = 'grabbing'; } 
+                if (hasDragged) { keyWaypoints[draggedIndex].x = parseFloat(Math.max(0, Math.min(FIELD_WIDTH, fieldPos.x)).toFixed(2)); keyWaypoints[draggedIndex].y = parseFloat(Math.max(0, Math.min(FIELD_HEIGHT, fieldPos.y)).toFixed(2)); recalculatePath(); } 
+                return; 
+            } 
+            let found = -1; 
+            for (let i = 0; i < keyWaypoints.length; i++) { 
+                if (Math.hypot(keyWaypoints[i].x - fieldPos.x, keyWaypoints[i].y - fieldPos.y) < 0.35) { found = i; break; } 
+            } 
+            if (found !== hoveredIndex) { hoveredIndex = found; canvas.style.cursor = (hoveredIndex !== -1) ? 'grab' : 'crosshair'; drawPoints(); } 
+        });
+        
+        canvas.addEventListener('mousedown', function(event) { 
+            if(isSimulating) return; 
+            const rect = canvas.getBoundingClientRect(); 
+            let fieldPos = getFieldCoords(event.clientX - rect.left, event.clientY - rect.top, rect); 
+            
+            if (hoveredIndex !== -1) { isDragging = true; draggedIndex = hoveredIndex; dragStartX = fieldPos.x; dragStartY = fieldPos.y; hasDragged = false; } 
+            else { openModalForNewPoint(parseFloat(fieldPos.x.toFixed(2)), parseFloat(fieldPos.y.toFixed(2))); } 
+        });
+        
         window.addEventListener('mouseup', function(event) { if(isSimulating) return; if (isDragging) { isDragging = false; canvas.style.cursor = (hoveredIndex !== -1) ? 'grab' : 'crosshair'; if (!hasDragged && draggedIndex !== -1) openModalForEdit(draggedIndex); draggedIndex = -1; } });
 
         function openModalForNewPoint(x, y) { 
@@ -384,6 +473,7 @@
             let isStop = inputIsStop.checked; let disconnectNext = inputDisconnectNext.checked;
             
             if (isNaN(x) || isNaN(y) || isNaN(heading) || isNaN(rotation) || isNaN(speed)) return alert("INVALID DATA"); 
+            // 🚀 这里也会根据动态改变后的 FIELD_WIDTH 去夹逼防止输入越界
             let newPt = { x: parseFloat(Math.max(0, Math.min(FIELD_WIDTH, x)).toFixed(2)), y: parseFloat(Math.max(0, Math.min(FIELD_HEIGHT, y)).toFixed(2)), heading: parseFloat(heading.toFixed(1)), headingOut: parseFloat(headingOut.toFixed(1)), rotation: parseFloat(rotation.toFixed(1)), speed: parseFloat(speed.toFixed(2)), isStop: isStop, disconnectNext: disconnectNext }; 
             if (activeEditIndex >= 0) keyWaypoints[activeEditIndex] = newPt; else keyWaypoints.push(newPt); 
             closeModal(); recalculatePath(); 
@@ -442,30 +532,29 @@
         }
 
         function toggleSimulation() { if (pathSegments.length === 0) return alert("Empty Canvas!"); if (isSimulating) { isSimulating = false; cancelAnimationFrame(animFrameId); btnSimulate.innerText = "▶️ SIMULATE"; btnSimulate.style.backgroundColor = "rgba(0, 243, 255, 0.1)"; btnSimulate.style.color = "var(--neon-cyan)"; drawPoints(); } else { isSimulating = true; simStartTime = 0; btnSimulate.innerText = "⏹️ HALT SIM"; btnSimulate.style.backgroundColor = "var(--neon-red)"; btnSimulate.style.color = "#fff"; animFrameId = requestAnimationFrame(simulateFrame); } }
-        function simulateFrame(timestamp) { if (!isSimulating) return; if (!simStartTime) simStartTime = timestamp; let elapsed = (timestamp - simStartTime) / 1000.0; if (elapsed > simTotalTime) { toggleSimulation(); return; } statusTip.innerHTML = `⏱️ SIMULATING... TIME: <b style="color:var(--neon-cyan)">${elapsed.toFixed(2)}s</b> / ETA: <b style="color:var(--neon-cyan)">${simTotalTime.toFixed(2)}s</b>`; let currentRobotState = simPoints[simPoints.length - 1]; for (let i = 0; i < simPoints.length - 1; i++) { if (elapsed >= simPoints[i].time && elapsed <= simPoints[i+1].time) { let p1 = simPoints[i]; let p2 = simPoints[i+1]; let dt = p2.time - p1.time; let t = (dt === 0) ? 1 : (elapsed - p1.time) / dt; let rotDiff = p2.rotation - p1.rotation; if(rotDiff > 180) rotDiff -= 360; if(rotDiff < -180) rotDiff += 360; currentRobotState = { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t, rotation: p1.rotation + rotDiff * t }; break; } } drawSimulationFrame(currentRobotState, elapsed); animFrameId = requestAnimationFrame(simulateFrame); }
+        function simulateFrame(timestamp) { if (!isSimulating) return; if (!simStartTime) simStartTime = timestamp; let elapsed = (timestamp - simStartTime) / 1000.0; if (elapsed > simTotalTime) { toggleSimulation(); return; } statusTip.innerHTML = `⏱️ SIMULATING. TIME: <b style="color:var(--neon-cyan)">${elapsed.toFixed(2)}s</b> / ETA: <b style="color:var(--neon-cyan)">${simTotalTime.toFixed(2)}s</b>`; let currentRobotState = simPoints[simPoints.length - 1]; for (let i = 0; i < simPoints.length - 1; i++) { if (elapsed >= simPoints[i].time && elapsed <= simPoints[i+1].time) { let p1 = simPoints[i]; let p2 = simPoints[i+1]; let dt = p2.time - p1.time; let t = (dt === 0) ? 1 : (elapsed - p1.time) / dt; let rotDiff = p2.rotation - p1.rotation; if(rotDiff > 180) rotDiff -= 360; if(rotDiff < -180) rotDiff += 360; currentRobotState = { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t, rotation: p1.rotation + rotDiff * t }; break; } } drawSimulationFrame(currentRobotState, elapsed); animFrameId = requestAnimationFrame(simulateFrame); }
         function drawSimulationFrame(robotState, elapsed) { ctx.clearRect(0, 0, canvas.width, canvas.height); if (bgImg.complete && bgImg.src) { ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.rotate(-Math.PI / 2); ctx.drawImage(bgImg, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width); ctx.restore(); } const scale = canvas.height / FIELD_WIDTH; let rLen = parseFloat(robotLengthInput.value) || 0.76; let rWid = parseFloat(robotWidthInput.value) || 0.76; let pxLen = rLen * scale; let pxWid = rWid * scale; ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)'; ctx.lineWidth = 1.5; pathSegments.forEach(seg => { ctx.beginPath(); seg.forEach((pt, index) => { let pos = getCanvasCoords(pt.x, pt.y); if (index === 0) ctx.moveTo(pos.px, pos.py); else ctx.lineTo(pos.px, pos.py); }); ctx.stroke(); }); let pos = getCanvasCoords(robotState.x, robotState.y); ctx.save(); ctx.translate(pos.px, pos.py); ctx.rotate(-Math.PI / 2 - robotState.rotation * Math.PI / 180); ctx.fillStyle = 'rgba(57, 255, 20, 0.3)'; ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2; ctx.shadowBlur = 10; ctx.shadowColor = '#39ff14'; ctx.fillRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid); ctx.strokeRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid); ctx.beginPath(); ctx.moveTo(pxLen / 2, -pxWid / 4); ctx.lineTo(pxLen / 2 + 12, 0); ctx.lineTo(pxLen / 2, pxWid / 4); ctx.closePath(); ctx.fillStyle = '#39ff14'; ctx.fill(); ctx.restore(); ctx.save(); ctx.fillStyle = "rgba(10, 11, 16, 0.85)"; ctx.fillRect(10, 10, 140, 36); ctx.strokeStyle = "#00f3ff"; ctx.lineWidth = 1; ctx.strokeRect(10, 10, 140, 36); ctx.font = "bold 20px 'Orbitron', monospace"; ctx.fillStyle = "#00f3ff"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(`⏱️ ${elapsed.toFixed(2)} s`, 15, 29); ctx.restore(); }
         
         function drawPoints() {
             if(isSimulating) return; ctx.clearRect(0, 0, canvas.width, canvas.height); 
             
-            // 背景渲染
+            // 🚀 画布拉伸自适应！这行代码会自动把你的自定义场地图片填充满新的比例！
             if (bgImg.complete && bgImg.src) { ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.rotate(-Math.PI / 2); ctx.drawImage(bgImg, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width); ctx.restore(); } 
             
             const scale = canvas.height / FIELD_WIDTH; let rLen = parseFloat(robotLengthInput.value) || 0.76; let rWid = parseFloat(robotWidthInput.value) || 0.76; let pxLen = rLen * scale; let pxWid = rWid * scale; 
             
-            // 路径连线 (默认保持青蓝色，不喧宾夺主)
+            // 路径连线
             ctx.strokeStyle = 'rgba(0, 243, 255, 0.6)'; ctx.lineWidth = 1.5; ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0, 243, 255, 0.3)';
             pathSegments.forEach(seg => { ctx.beginPath(); seg.forEach((pt, index) => { let pos = getCanvasCoords(pt.x, pt.y); if (index === 0) ctx.moveTo(pos.px, pos.py); else ctx.lineTo(pos.px, pos.py); }); ctx.stroke(); }); ctx.shadowBlur = 0;
             
             // 路径轨迹小点点
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; pathSegments.forEach(seg => { seg.forEach(pt => { let pos = getCanvasCoords(pt.x, pt.y); ctx.beginPath(); ctx.arc(pos.px, pos.py, 1.5, 0, Math.PI * 2); ctx.fill(); }); }); 
             
-            // 🚀 核心修改：航点机器人方框渲染
+            // 航点机器人方框渲染
             keyWaypoints.forEach((pt, index) => {
                 let pos = getCanvasCoords(pt.x, pt.y); let isHover = (index === hoveredIndex); let curRot = pt.rotation !== undefined ? pt.rotation : pt.heading;
                 ctx.save(); ctx.translate(pos.px, pos.py); ctx.rotate(-Math.PI / 2 - curRot * Math.PI / 180);
                 
-                // 🚨 颜色逻辑：选中为亮黄色 (#ffe600)，默认为霓虹绿 (#39ff14)
                 if (isHover) { ctx.shadowBlur = 18; ctx.shadowColor = '#ffe600'; } 
                 else { ctx.shadowBlur = 8; ctx.shadowColor = '#39ff14'; }
                 
@@ -481,7 +570,7 @@
                 ctx.fill(); 
                 ctx.restore(); 
 
-                // 节点中心锚点 (停止点为红，普通点跟随主色调)
+                // 节点中心锚点
                 if (pt.isStop) { 
                     ctx.fillStyle = isHover ? '#ffe600' : '#ff2a2a'; 
                     ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle;
