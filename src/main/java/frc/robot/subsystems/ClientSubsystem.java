@@ -1,6 +1,7 @@
 package frc.robot.subsystems;
 
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.DriverStation;
@@ -71,7 +72,7 @@ public class ClientSubsystem extends SubsystemBase {
                 Pose2d currentPose = m_drivesubsystem.getState().Pose;
                 m_field.setRobotPose(currentPose);
             }
-
+            updateDynamicPathVisualization();
             // Publish central match telemetry parameters
             SmartDashboard.putNumber("MatchTime", DriverStation.getMatchTime());
             // 🚨 架构师注意：Java 中电池电压一般从 RobotController 获取
@@ -82,6 +83,32 @@ public class ClientSubsystem extends SubsystemBase {
         } catch (Exception e) {
             SmartDashboard.putString("ClientSubsystem Periodic Failed:", e.getMessage());
         }
+    }
+    /**
+     * 实时获取 PassPlanner 算出的最新路径，并投影到 Dashboard 场地上
+     */
+    private void updateDynamicPathVisualization() {
+        if (m_drivesubsystem == null || m_drivesubsystem.passPlanner == null) return;
+
+        // 获取 PassPlanner 实时生成的底盘路径数组
+        double[] xArr = m_drivesubsystem.passPlanner.dynamicXArray;
+        double[] yArr = m_drivesubsystem.passPlanner.dynamicYArray;
+
+        // 防呆保护：如果没有路径或数组不匹配，清空显示
+        if (xArr == null || yArr == null || xArr.length == 0 || xArr.length != yArr.length) {
+            m_field.getObject("Dynamic Trajectory").setPoses(); // 传入空参数会清除界面上的连线
+            return;
+        }
+
+        // 将离散的 XY 坐标打包成 Field2d 需要的 Pose2d 数组
+        Pose2d[] pathPoses = new Pose2d[xArr.length];
+        for (int i = 0; i < xArr.length; i++) {
+            // 这里传入 Rotation2d() 纯粹是为了满足格式要求，Dashboard 连线时主要看 X 和 Y
+            pathPoses[i] = new Pose2d(xArr[i], yArr[i], new Rotation2d());
+        }
+
+        // 推送到 Dashboard，名字叫 "Dynamic Trajectory"
+        m_field.getObject("Dynamic Trajectory").setPoses(pathPoses);
     }
 
     private void updateMatchPhaseCountdown() {
