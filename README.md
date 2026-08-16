@@ -1,4 +1,4 @@
-# 🌌 Pass Planner | User-unfriendly Highly-customizable Light-weight Low-key FRC Path Generation Tool
+# 🌌 Pass Planner | User-unfriendly Highly-customizable Light-weight Low-latency Low-key FRC Path Generation Tool
 
 ![Pass Planner UI](tools/screenshot.png) <!-- 💡 替换为你的网页截图路径 -->
 
@@ -7,7 +7,7 @@ Welcome to the **Pass Planner** repository! This project represents a modern, da
 We have successfully separated the "Tactical Brain" (Trajectory Generation & Targeting) from the "Physical Muscle" (Phoenix 6 Hardware Control), resulting in a zero-configuration, highly robust Autonomous system.
 
 > **🌊 2025 Reefscape Ready, Future-Proofed for Anything**
-> The current logic and examples in this repository (such as the dynamic Reef routing) are specifically tailored for the **2025 FRC game, REEFSCAPE**. However, the core Pass Planner engine is incredibly highly-customizable. You can easily swap out the field background, coordinate arrays, and targeting math to adapt this tool for any future FRC game!
+> The current logic and examples in this repository (such as the dynamic Reef routing) are specifically tailored for the **2025 FRC game, REEFSCAPE**. However, the core Pass Planner engine is incredibly highly-customizable. You can easily swap out the field background, coordinate arrays, and targeting math in java files to adapt this tool for any future FRC game!
 
 ## ✨ Core Philosophy: The MVC Architecture
 Instead of dumping math and logic into the drivetrain, this project strictly follows a decoupled design:
@@ -28,7 +28,7 @@ Included in the `tools/` folder is **PassPlanner.html**, a lightweight, fully of
 ### 2. Universal Absolute Mapping (Blue Universe)
 No more writing separate autos for Red and Blue! The `PassPlanner` engine features a **Universal Coordinate Folder**:
 * Automatically detects Alliance Color.
-* Projects Red Alliance robot coordinates mathematically into the Blue Alliance universe.
+* Projects Red Alliance robot coordinates mathematically into the Blue Alliance universe (current default coordinate is the left side of blue alliance).
 * Preserves real physical momentum and inertia (Field-Centric velocity vectoring) when generating dynamic takeover paths.
 
 ### 3. Dynamic Reef Takeover
@@ -36,7 +36,7 @@ Calculates the absolute shortest topological distance to any of the 6 Reef faces
 
 ### 4. Zero-Config Smart Autonomous
 The `RobotContainer` features a smart `refreshAutoMode()` loop running during `disabledPeriodic()`.
-* Automatically detects the robot's physical starting position on the field (Left vs. Right).
+* Automatically detects the robot's physical starting position on the field (Left vs. Right) (need visual measurement before match start).
 * Automatically reads the Alliance color.
 * **Preloads** the exact trajectory from JSON before the match even starts, preventing loop overruns and CPU spikes during the Auto init phase.
 
@@ -51,6 +51,55 @@ While `PassPlanner` acts as the brain, we've built a modular suite of commands t
 ## 🎥 Simulation Showcase
 
 Watch the Pass Planner brain and the `AutoMove` suite in action within the WPILib / AdvantageScope simulation environment!
+
+*(Add your Auto and Teleop simulation GIFs/MP4s here)*
+
+---
+
+## 🧠 API Deep Dive: `PassPlanner.java`
+
+The `PassPlanner` class is the tactical calculating engine of the robot. It generates raw data arrays (`dynamicXArray`, `dynamicYArray`, `dynamicSpeedArray`) which are then fed directly into the `AutoMove` muscle commands.
+
+### 🔌 Dependency Injection
+* `setDrivetrain(CommandSwerveDrivetrain drivetrain)`
+  * **Role:** Connects the tactical brain to the physical chassis. 
+  * **Usage:** Call this once in `RobotContainer` during initialization. By using Setter Injection instead of constructor injection, we prevent cyclical dependencies and keep the architecture clean.
+
+### 🎯 Target Management (Reefscape Specific)
+* `changeReefID(int i)` / `SetReefID(int i)`
+  * **Role:** Returns a WPILib `Command` to incrementally cycle or directly set the active Reef target face (ID 0 to 5).
+  * **Usage:** Bind these to your operator controller's POV (D-Pad) or bumpers to let the driver select which face of the Reef to attack next.
+* `getFaceCenterAngle(int faceID)`
+  * **Role:** A mathematical lookup table that returns the absolute field heading (in degrees) required to squarely face any given Reef ID.
+
+### 🌍 Field Topology & State Tracking
+* `updateReefRegion()`
+  * **Role:** The Radar. It continuously calculates which of the 6 surrounding Reef sectors the robot is currently physically located in (`currentRegionID`). It inherently handles "Blue Universe" projection (flipping Red coordinates to Blue) so math never breaks. 
+  * **Usage:** Must be called in a periodic loop (e.g., `drivetrain.periodic()`). It also pushes real-time telemetry to Elastic Dashboard.
+* `calcShortestReefPath()` / `calcShortestReefPath(int tar)`
+  * **Role:** The Pathfinder. Calculates the absolute shortest rotational distance (clockwise or counter-clockwise steps) from the robot's current sector to the target sector. 
+  * **Usage:** Returns an integer (`-2, -1, 0, 1, 2, 3`). Negative means turn left, positive means turn right. Includes a highly advanced "Tie-breaker" algorithm for `step == 3` (exactly opposite sides) based on the robot's precise sub-sector angle.
+
+### 🧮 The Kinematic Bezier Engine (Private Core)
+* `generateBezierSegment(...)` *(Overloaded)*
+  * **Role:** The heart of the engine. The geometric version generates 3rd-order Bezier curves with independent `tensionOut` and `tensionIn` parameters, cutting them into 15cm resolution points. 
+  * **The Kinematic Profiler:** The heavy-duty overload applies physics. It takes $v = \sqrt{v_0^2 + 2as}$ and calculates a full-quadrant speed profile based on `maxAccel`. Depending on `mainSpeedIsStart`, it decides whether to execute a "Late Brake" (maintain high speed, brake at the very end) or "Holeshot" (accelerate immediately, maintain speed).
+
+### 🚀 Public Path Generators
+* `generateUniversalBezier(...)`
+  * **Role:** The Swiss Army Knife for Point-to-Point routing. 
+  * **Usage:** Generates a full kinematic path from the robot's current position to ANY target `Pose2d`. 
+  * **Features:** Automatically captures the robot's real-time velocity vector (Momentum Preservation), converts Red Alliance space into Blue Universe space, and writes the calculated physics data directly into the public `dynamicArray` buffers.
+* `generateDynamicPath(int branchIndex, double targetSpeedStart, double targetSpeed)`
+  * **Role:** The Dynamic Takeover Engine. Calculates a surgical 45-degree lateral interception path to the selected Reef face based on the `calcShortestReefPath()` topological steps.
+  * **Usage:** Tied to a teleop button. Uses a brutal **8.0 m/s² deceleration profile** (`mainSpeedIsStart = true`) to allow the driver to blast toward the Reef at top speed while the code handles the last-second aggressive braking and alignment perfectly.
+* `gDPCommand(...)`
+  * **Role:** Wraps `generateDynamicPath` into a clean WPILib `Command` format to be bound to triggers.
+
+### 🛠️ Pre-Baked Routing Commands
+* `CreatePathToLeftSupply()` / `CreatePathToRightSupply()`
+  * **Role:** Preset examples of `generateUniversalBezier`. 
+  * **Usage:** Immediately generates a high-speed, physics-profiled path from anywhere on the field to the exact coordinates of the Supply Stations.
 
 ---
 

@@ -179,19 +179,35 @@ public class PassPlanner {
     }
 
     // ==========================================
-    // 🧮 底层贝塞尔引擎 (Bezier Engine)
+    // 🧮 底层贝塞尔引擎 (Bezier Engine) - 几何生成
     // ==========================================
 
+    /**
+     * 兜底重载：如果不传入张力，默认使用 0.4（保证原有的 generateDynamicPath 不报错）
+     */
     private void generateBezierSegment(double startX, double startY, double headingOut, 
                                        double endX, double endY, double headingIn, 
                                        ArrayList<Double> xList, ArrayList<Double> yList) {
-        double dist = Math.hypot(endX - startX, endY - startY);
-        double weight = dist * 0.4; 
+        generateBezierSegment(startX, startY, headingOut, endX, endY, headingIn, 0.4, 0.4, xList, yList);
+    }
 
-        double cp0X = startX + weight * Math.cos(Math.toRadians(headingOut));
-        double cp0Y = startY + weight * Math.sin(Math.toRadians(headingOut));
-        double cp1X = endX - weight * Math.cos(Math.toRadians(headingIn));
-        double cp1Y = endY - weight * Math.sin(Math.toRadians(headingIn));
+    /**
+     * 📐 【核心】纯几何贝塞尔生成器 (支持独立入弯/出弯张力)
+     */
+    private void generateBezierSegment(double startX, double startY, double headingOut, 
+                                       double endX, double endY, double headingIn, 
+                                       double tensionOut, double tensionIn,
+                                       ArrayList<Double> xList, ArrayList<Double> yList) {
+        double dist = Math.hypot(endX - startX, endY - startY);
+        
+        // 🚀 使用网页端传进来的独立张力
+        double weight0 = dist * tensionOut; 
+        double weight1 = dist * tensionIn; 
+
+        double cp0X = startX + weight0 * Math.cos(Math.toRadians(headingOut));
+        double cp0Y = startY + weight0 * Math.sin(Math.toRadians(headingOut));
+        double cp1X = endX - weight1 * Math.cos(Math.toRadians(headingIn));
+        double cp1Y = endY - weight1 * Math.sin(Math.toRadians(headingIn));
 
         // 动态切割优化
         int numSteps = 100; 
@@ -224,6 +240,156 @@ public class PassPlanner {
         }
     }
 
+    /**
+     * 🏎️ 【完全体】运动学重载版贝塞尔生成器 (带全象限加减速物理规划 + 独立张力)
+     */
+    private void generateBezierSegment(double startX, double startY, double headingOut, 
+                                       double endX, double endY, double headingIn,
+                                       double startSpeed, double endSpeed, 
+                                       double maxAccel, boolean mainSpeedIsStart,
+                                       double tensionOut, double tensionIn,
+                                       ArrayList<Double> xList, ArrayList<Double> yList, ArrayList<Double> speedList) {
+        
+        // 1. 调用支持双张力的几何生成器，先算出所有的 X 和 Y 坐标路径点
+        generateBezierSegment(startX, startY, headingOut, endX, endY, headingIn, tensionOut, tensionIn, xList, yList);
+        
+        // 2. 运动学速度规划 (Kinematic Profiling)
+        int size = xList.size();
+        speedList.clear();
+        for (int i = 0; i < size; i++) speedList.add(0.0); // 初始化占位
+
+        if (size == 0) return;
+        if (size == 1) {
+            speedList.set(0, mainSpeedIsStart ? startSpeed : endSpeed);
+            return;
+        }
+
+        maxAccel = Math.abs(maxAccel);
+
+        if (mainSpeedIsStart) {
+            speedList.set(size - 1, endSpeed);
+            boolean isDeceleratingAtEnd = startSpeed > endSpeed;
+            
+            for (int i = size - 2; i >= 0; i--) {
+                double ds = Math.hypot(xList.get(i+1) - xList.get(i), yList.get(i+1) - yList.get(i));
+                double nextV = speedList.get(i+1);
+                
+                if (isDeceleratingAtEnd) {
+                    double requiredV = Math.sqrt(nextV * nextV + 2 * maxAccel * ds);
+                    speedList.set(i, Math.min(startSpeed, requiredV));
+                } else {
+                    double requiredV = Math.sqrt(Math.max(0, nextV * nextV - 2 * maxAccel * ds));
+                    speedList.set(i, Math.max(startSpeed, requiredV));
+                }
+            }
+        } else {
+            speedList.set(0, startSpeed);
+            boolean isAcceleratingAtStart = startSpeed < endSpeed;
+            
+            for (int i = 1; i < size; i++) {
+                double ds = Math.hypot(xList.get(i) - xList.get(i-1), yList.get(i) - yList.get(i-1));
+                double prevV = speedList.get(i-1);
+                
+                if (isAcceleratingAtStart) {
+                    double requiredV = Math.sqrt(prevV * prevV + 2 * maxAccel * ds);
+                    speedList.set(i, Math.min(endSpeed, requiredV));
+                } else {
+                    double requiredV = Math.sqrt(Math.max(0, prevV * prevV - 2 * maxAccel * ds));
+                    speedList.set(i, Math.max(endSpeed, requiredV));
+                }
+            }
+        }
+    }
+
+    /**
+     * 🏎️ 【完全体对外接口】带物理加速度规划 + 独立张力控制的全局生成器
+     */
+    public void generateUniversalBezier(Pose2d startPose, Pose2d endPose, 
+                                        double targetDirectionDeg, 
+                                        double startSpeed, double endSpeed,
+                                        double maxAccel, boolean mainSpeedIsStart,
+                                        double tensionOut, double tensionIn,
+                                        boolean invertXOnRed, boolean invertYOnRed) {
+        if (m_drivetrain == null) return;
+        
+        double startX, startY, headingOut;
+        double realStartSpeed = startSpeed;
+        Optional<DriverStation.Alliance> alliance = DriverStation.getAlliance();
+        boolean isRed = alliance.isPresent() && alliance.get() == DriverStation.Alliance.Red;
+
+        if (startPose != null) {
+            startX = startPose.getX();
+            startY = startPose.getY();
+            headingOut = startPose.getRotation().getDegrees();
+        } else {
+            Pose2d currentPose = m_drivetrain.getState().Pose;
+            startX = currentPose.getX();
+            startY = currentPose.getY();
+
+            // 获取绝对 Field-Centric 速度方向
+            double robotVx = m_drivetrain.getState().Speeds.vxMetersPerSecond;
+            double robotVy = m_drivetrain.getState().Speeds.vyMetersPerSecond;
+            Rotation2d currentRot = currentPose.getRotation();
+
+            double fieldVx = robotVx * currentRot.getCos() - robotVy * currentRot.getSin();
+            double fieldVy = robotVx * currentRot.getSin() + robotVy * currentRot.getCos();
+
+            double currentActualSpeed = Math.hypot(fieldVx, fieldVy);
+            double currentMovingAngle = Math.toDegrees(Math.atan2(fieldVy, fieldVx));
+
+            // 空间向量映射：将红方物理状态投影回蓝方
+            if (isRed) {
+                if (invertXOnRed) startX = 17.55 - startX;
+                if (invertYOnRed) startY = 8.05 - startY;
+                
+                if (invertXOnRed && invertYOnRed) {
+                    currentMovingAngle -= 180.0;
+                } else if (invertXOnRed && !invertYOnRed) {
+                    currentMovingAngle = 180.0 - currentMovingAngle;
+                } else if (!invertXOnRed && invertYOnRed) {
+                    currentMovingAngle = -currentMovingAngle;
+                }
+                
+                while (currentMovingAngle > 180.0) currentMovingAngle -= 360.0;
+                while (currentMovingAngle < -180.0) currentMovingAngle += 360.0;
+            }
+
+            // 动量保留
+            if (currentActualSpeed > 1.0) {
+                headingOut = currentMovingAngle;
+                realStartSpeed = Math.max(startSpeed, currentActualSpeed);
+            } else {
+                headingOut = Math.toDegrees(Math.atan2(endPose.getY() - startY, endPose.getX() - startX));
+            }
+        }
+
+        double endX = endPose.getX();
+        double endY = endPose.getY();
+        double headingIn = targetDirectionDeg; 
+
+        ArrayList<Double> xList = new ArrayList<>();
+        ArrayList<Double> yList = new ArrayList<>();
+        ArrayList<Double> speedList = new ArrayList<>();
+        
+        // 🚀 传入刚才新增的 tensionOut 和 tensionIn
+        generateBezierSegment(startX, startY, headingOut, endX, endY, headingIn, 
+                              realStartSpeed, endSpeed, maxAccel, mainSpeedIsStart, 
+                              tensionOut, tensionIn, 
+                              xList, yList, speedList);
+
+        // 存入底层数组缓存
+        int totalPoints = xList.size();
+        this.dynamicXArray = new double[totalPoints];
+        this.dynamicYArray = new double[totalPoints];
+        this.dynamicSpeedArray = new double[totalPoints];
+
+        for (int i = 0; i < totalPoints; i++) {
+            this.dynamicXArray[i] = xList.get(i);
+            this.dynamicYArray[i] = yList.get(i);
+            this.dynamicSpeedArray[i] = speedList.get(i);
+        }
+    }
+    
     /**
      * 全局通用三阶贝塞尔曲线生成器 (蓝方宇宙映射版)
      */
@@ -311,8 +477,9 @@ public class PassPlanner {
         }
     }
 
+    
     /**
-     * 动态生成前往目标 Reef 的打分路线 (45° 侧切接管)
+     * 动态生成前往目标 Reef 的打分路线 (45° 侧切接管 + 8.0 m/s² 物理极速晚刹车)
      */
     public void generateDynamicPath(int branchIndex, double targetSpeedStart, double targetSpeed) {
         if (m_drivetrain == null) return;
@@ -349,6 +516,7 @@ public class PassPlanner {
 
         ArrayList<Double> xList = new ArrayList<>();
         ArrayList<Double> yList = new ArrayList<>();
+        ArrayList<Double> speedList = new ArrayList<>(); // 🚀 引入物理速度计算列表
 
         double centerX = 4.489;
         double centerY = 4.026;
@@ -371,14 +539,24 @@ public class PassPlanner {
             double p0X = centerX + 1.9 * Math.cos(Math.toRadians(boundaryAngle));
             double p0Y = centerY + 1.9 * Math.sin(Math.toRadians(boundaryAngle));
             double p0HeadingOut = boundaryAngle + (step > 0 ? -90.0 : 90.0);
-            generateBezierSegment(p0X, p0Y, p0HeadingOut, p2X, p2Y, p2HeadingIn, xList, yList);
+            
+            // 🚀 调用新版物理生成器：加速度 8.0，主速度在起点 (true)，张力默认 0.4
+            generateBezierSegment(p0X, p0Y, p0HeadingOut, p2X, p2Y, p2HeadingIn, 
+                                  targetSpeedStart, targetSpeed, 
+                                  5.0, true, 0.4, 0.4, 
+                                  xList, yList, speedList);
         } else if (Math.abs(step) == 1) {
             double p1X = centerX + 2.3 * Math.cos(Math.toRadians(targetCenterAngle + (step > 0 ? 30.0 : -30.0)));
             double p1Y = centerY + 2.3 * Math.sin(Math.toRadians(targetCenterAngle + (step > 0 ? 30.0 : -30.0)));
             double p0HeadingOut = Math.toDegrees(Math.atan2(p1Y - currentY, p1X - currentX));
             
             if (currentActualSpeed > 1.0) p0HeadingOut = currentMovingAngle;
-            generateBezierSegment(currentX, currentY, p0HeadingOut, p2X, p2Y, p2HeadingIn, xList, yList);
+            
+            // 🚀 调用新版物理生成器：加速度 8.0，主速度在起点 (true)，张力默认 0.4
+            generateBezierSegment(currentX, currentY, p0HeadingOut, p2X, p2Y, p2HeadingIn, 
+                                  targetSpeedStart, targetSpeed, 
+                                  5.0, true, 0.4, 0.4, 
+                                  xList, yList, speedList);
         }
 
         int totalPoints = xList.size();
@@ -389,13 +567,7 @@ public class PassPlanner {
         for (int i = 0; i < totalPoints; i++) {
             this.dynamicXArray[i] = xList.get(i);
             this.dynamicYArray[i] = yList.get(i);
-            
-            if (totalPoints > 1) {
-                double progress = (double) i / (totalPoints - 1);
-                this.dynamicSpeedArray[i] = targetSpeedStart + (targetSpeed - targetSpeedStart) * progress;
-            } else {
-                this.dynamicSpeedArray[i] = targetSpeed;
-            }
+            this.dynamicSpeedArray[i] = speedList.get(i); 
         }
     }
 

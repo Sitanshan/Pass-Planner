@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>FRC Pass Planner v19.3 (Dynamic Scale)</title>
+    <title>FRC Pass Planner v19.7 (Segment Simulation)</title>
     <style>
         /* ==========================================
            🌌 赛博朋克 霓虹科技感主题 (Cyberpunk Neon Theme)
@@ -22,7 +22,6 @@
         body { 
             font-family: 'Rajdhani', 'Segoe UI', sans-serif; 
             background-color: var(--bg-dark); 
-            /* 科技感网格背景 */
             background-image: 
                 linear-gradient(rgba(0, 243, 255, 0.05) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(0, 243, 255, 0.05) 1px, transparent 1px);
@@ -32,7 +31,6 @@
             display: flex; padding: 20px; gap: 30px; margin: 0; box-sizing: border-box; height: 100vh; overflow: hidden; 
         }
 
-        /* 场地面板 (左侧) */
         .left-panel { width: 323px; display: flex; flex-direction: column; gap: 15px; flex-shrink: 0; }
         
         #fieldCanvas { 
@@ -40,14 +38,12 @@
             border: 2px solid var(--neon-cyan); 
             box-shadow: 0 0 15px rgba(0, 243, 255, 0.3), inset 0 0 20px rgba(0, 243, 255, 0.1); 
             border-radius: 6px; 
-            
-            /* 🚀 核心修复：允许边框自适应紧贴画布，彻底消灭未覆盖的黑边 */
             max-width: 100%;
             max-height: calc(100vh - 100px);
             width: auto;
             height: auto;
             display: block;
-            margin: 0 auto; /* 如果因屏幕太矮导致整体缩小，让它在左侧优雅居中 */
+            margin: 0 auto; 
         }
 
         .tip { 
@@ -63,10 +59,8 @@
             border-radius: 4px;
         }
 
-        /* 控制面板 (右侧) */
         .right-panel { flex: 1; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; padding-right: 10px; }
         
-        /* 自定义滚动条 */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: var(--neon-cyan); border-radius: 4px; box-shadow: 0 0 5px var(--neon-cyan); }
@@ -84,7 +78,6 @@
         .control-row { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
         .control-group { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #fff;}
         
-        /* 输入框样式 */
         .control-group input[type="text"], .control-group input[type="number"], select { 
             background-color: rgba(0, 0, 0, 0.5); 
             border: 1px solid var(--neon-cyan); 
@@ -96,127 +89,93 @@
             outline: none; 
             transition: 0.3s;
         }
-        .control-group input:focus, select:focus {
-            box-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
-            background-color: rgba(0, 243, 255, 0.1);
-        }
+        .control-group input:focus, select:focus { box-shadow: 0 0 10px rgba(0, 243, 255, 0.5); background-color: rgba(0, 243, 255, 0.1); }
         .control-group input[type="number"] { text-align: center; }
 
-        /* 滑动条样式 */
         input[type="range"] { -webkit-appearance: none; width: 100px; background: transparent; }
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: var(--neon-cyan); cursor: pointer; margin-top: -6px; box-shadow: 0 0 10px var(--neon-cyan); }
         input[type="range"]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #333; border-radius: 2px; border: 1px solid rgba(0, 243, 255, 0.3); }
 
-        /* 代码输出框 (黑客终端风) */
         textarea { 
-            flex: 1; 
-            background-color: rgba(5, 5, 10, 0.85); 
-            color: var(--neon-green); 
-            font-family: 'Consolas', 'Courier New', Courier, monospace; 
-            padding: 15px; 
-            border: 1px solid var(--neon-green); 
-            border-radius: 8px; 
-            font-size: 14px; 
-            resize: none; 
-            white-space: pre; 
-            min-height: 200px; 
-            box-shadow: inset 0 0 15px rgba(57, 255, 20, 0.1);
-            text-shadow: 0 0 3px rgba(57, 255, 20, 0.5);
+            flex: 1; background-color: rgba(5, 5, 10, 0.85); color: var(--neon-green); 
+            font-family: 'Consolas', 'Courier New', Courier, monospace; padding: 15px; 
+            border: 1px solid var(--neon-green); border-radius: 8px; font-size: 14px; 
+            resize: none; white-space: pre; min-height: 200px; 
+            box-shadow: inset 0 0 15px rgba(57, 255, 20, 0.1); text-shadow: 0 0 3px rgba(57, 255, 20, 0.5);
         }
 
-        /* ==========================================
-           🕹️ 霓虹按钮系统
-           ========================================== */
         button { 
-            background-color: rgba(0, 0, 0, 0.6); 
-            border: 1px solid currentColor; 
-            padding: 8px 15px; 
-            cursor: pointer; 
-            font-size: 14px; 
-            font-family: 'Rajdhani', sans-serif;
-            font-weight: 700;
-            letter-spacing: 1px;
-            border-radius: 4px; 
-            transition: all 0.2s ease-in-out; 
-            text-transform: uppercase;
+            background-color: rgba(0, 0, 0, 0.6); border: 1px solid currentColor; padding: 8px 15px; 
+            cursor: pointer; font-size: 14px; font-family: 'Rajdhani', sans-serif; font-weight: 700;
+            letter-spacing: 1px; border-radius: 4px; transition: all 0.2s ease-in-out; text-transform: uppercase;
         }
-
-        /* 默认蓝 (读取/取消) */
         button { color: var(--neon-cyan); box-shadow: 0 0 5px rgba(0, 243, 255, 0.2), inset 0 0 5px rgba(0, 243, 255, 0.1); }
         button:hover { background-color: var(--neon-cyan); color: #000; box-shadow: 0 0 15px var(--neon-cyan); }
-
-        /* 绿色 (新增) */
-        button.btn-add { color: var(--neon-green); border-color: var(--neon-green); box-shadow: 0 0 5px rgba(57, 255, 20, 0.2); }
-        button.btn-add:hover { background-color: var(--neon-green); color: #000; box-shadow: 0 0 15px var(--neon-green); }
-
-        /* 红色 (删除/危险) */
         button.btn-danger { color: var(--neon-red); border-color: var(--neon-red); box-shadow: 0 0 5px rgba(255, 42, 42, 0.2); }
         button.btn-danger:hover { background-color: var(--neon-red); color: #fff; box-shadow: 0 0 15px var(--neon-red); }
-
-        /* 黄色 (保存) */
         button.btn-warning { color: var(--neon-yellow); border-color: var(--neon-yellow); box-shadow: 0 0 5px rgba(255, 230, 0, 0.2); }
         button.btn-warning:hover { background-color: var(--neon-yellow); color: #000; box-shadow: 0 0 15px var(--neon-yellow); }
-
-        /* 骚粉/紫色 (Deploy) */
         button.btn-deploy { color: var(--neon-magenta); border-color: var(--neon-magenta); box-shadow: 0 0 8px rgba(255, 0, 255, 0.3); font-size: 15px;}
         button.btn-deploy:hover { background-color: var(--neon-magenta); color: #fff; box-shadow: 0 0 20px var(--neon-magenta); }
-
-        /* 模拟器 (特殊样式) */
         button.btn-sim { background-color: rgba(0, 243, 255, 0.1); color: var(--neon-cyan); border-color: var(--neon-cyan); font-size: 15px; }
         button.btn-sim:hover { background-color: var(--neon-cyan); color: #000; box-shadow: 0 0 20px var(--neon-cyan); }
-
-        /* 橘色 (PID) */
         button.btn-pid { color: #ff5722; border-color: #ff5722; }
         button.btn-pid:hover { background-color: #ff5722; color: #fff; box-shadow: 0 0 15px #ff5722; }
-
-        /* 蓝色文件夹 */
         button.btn-folder { color: #4dabf7; border-color: #4dabf7; }
         button.btn-folder:hover { background-color: #4dabf7; color: #000; box-shadow: 0 0 15px #4dabf7; }
-
-        /* 灰色次要按钮 */
         button.btn-secondary { color: #adb5bd; border-color: #adb5bd; }
         button.btn-secondary:hover { background-color: #adb5bd; color: #000; box-shadow: 0 0 10px #adb5bd; }
-
         .divider { width: 1px; height: 24px; background-color: rgba(255,255,255,0.1); margin: 0 5px; }
-        
+
         /* ==========================================
-           🎛️ 模态框 (弹窗)
+           🚀 核心视觉架构：时间轴节点与路径UI (Timeline)
            ========================================== */
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(6px); display: none; justify-content: center; align-items: center; z-index: 999; }
-        .modal-card { 
-            background-color: var(--panel-bg); 
-            border: 1px solid var(--neon-cyan); 
-            border-radius: 8px; 
-            width: 440px; 
-            padding: 25px; 
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.2), inset 0 0 20px rgba(0, 0, 0, 0.8); 
+        #timelineContainer { display: flex; flex-direction: column; gap: 8px; }
+
+        .node-item { 
+            background: rgba(57, 255, 20, 0.05); border: 1px solid rgba(57, 255, 20, 0.3); 
+            border-radius: 6px; padding: 12px; transition: 0.3s; 
         }
-        .modal-card h3 { margin-top: 0; color: var(--neon-cyan); border-bottom: 1px solid rgba(0, 243, 255, 0.3); padding-bottom: 10px; font-size: 18px; font-family: 'Orbitron', sans-serif; text-transform: uppercase; letter-spacing: 1px;}
+        .node-item:hover, .node-item.active { border-color: var(--neon-green); box-shadow: 0 0 12px rgba(57, 255, 20, 0.2); }
+        .node-header { 
+            color: var(--neon-green); font-family: 'Orbitron', sans-serif; font-weight: bold; font-size: 15px; 
+            margin-bottom: 10px; border-bottom: 1px solid rgba(57, 255, 20, 0.2); padding-bottom: 6px; 
+            display: flex; justify-content: space-between; align-items: center;
+        }
         
-        .form-group { margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px; }
-        .form-group label { font-size: 13px; color: #a0a0a0; font-weight: 600;}
-        .form-group input { width: 100%; box-sizing: border-box; }
-        .form-row { display: flex; gap: 10px; }
-        .form-row .form-group { flex: 1; }
+        .segment-item { 
+            background: rgba(0, 243, 255, 0.05); border: 1px dashed rgba(0, 243, 255, 0.4); 
+            border-radius: 6px; padding: 10px; margin-left: 30px; margin-right: 10px; 
+            transition: 0.3s; position: relative;
+        }
+        .segment-item::before { content: ''; position: absolute; left: -15px; top: -10px; bottom: -10px; width: 2px; background: rgba(0, 243, 255, 0.3); }
+        .segment-item:hover { border-color: var(--neon-cyan); box-shadow: 0 0 10px rgba(0, 243, 255, 0.2); }
+        .segment-header { color: var(--neon-cyan); font-family: 'Orbitron', sans-serif; font-weight: bold; font-size: 13px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
 
-        /* Checkbox 科技感重做 */
-        .checkbox-group { flex-direction: row !important; align-items: center; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); }
-        .checkbox-group input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--neon-cyan); }
-        .checkbox-group label { color: #fff !important; font-weight: bold; cursor: pointer; margin-left: 5px; }
+        .timeline-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+        .timeline-controls .form-group { flex: 1; min-width: 70px; margin-bottom: 0; }
+        .timeline-controls input, .timeline-controls select { 
+            width: 100%; box-sizing: border-box; background-color: rgba(0,0,0,0.8); 
+            border: 1px solid #555; color: #fff; padding: 4px 6px; font-family: 'Orbitron', sans-serif;
+            border-radius: 3px; outline: none;
+        }
+        .node-item .timeline-controls input { border-color: rgba(57, 255, 20, 0.4); }
+        .node-item .timeline-controls input:focus { box-shadow: 0 0 8px rgba(57, 255, 20, 0.6); }
+        .segment-item .timeline-controls input, .segment-item .timeline-controls select { border-color: rgba(0, 243, 255, 0.4); }
         
-        .modal-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
-        .modal-actions-right { display: flex; gap: 10px; }
-        .modal-actions-left { display: flex; gap: 5px; }
+        .btn-icon { background: transparent; border: none; font-size: 14px; cursor: pointer; padding: 2px 6px; box-shadow: none; color: white;}
+        .btn-icon:hover { background: rgba(255,255,255,0.2); }
+        .btn-icon.danger:hover { background: var(--neon-red); }
 
-        /* 模态框特殊颜色高亮 */
-        .highlight-red label { color: var(--neon-red) !important; text-shadow: 0 0 5px rgba(255,42,42,0.4);}
-        .highlight-red input { border-color: var(--neon-red) !important; color: var(--neon-red) !important;}
+        .inline-checkbox { display: flex; align-items: center; gap: 5px; cursor: pointer; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px; border: 1px solid #555;}
+        .inline-checkbox input { width: 14px; height: 14px; cursor: pointer;}
         
-        .highlight-purple label { color: var(--neon-magenta) !important; text-shadow: 0 0 5px rgba(255,0,255,0.4);}
-        .highlight-purple input { border-color: var(--neon-magenta) !important; color: var(--neon-magenta) !important;}
-        
-        .highlight-yellow label { color: var(--neon-yellow) !important; text-shadow: 0 0 5px rgba(255,230,0,0.4);}
-        .highlight-yellow input { border-color: var(--neon-yellow) !important; color: var(--neon-yellow) !important;}
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(6px); display: none; justify-content: center; align-items: center; z-index: 999; }
+        .modal-card { background-color: var(--panel-bg); border: 1px solid var(--neon-cyan); border-radius: 8px; width: 320px; padding: 25px; box-shadow: 0 0 30px rgba(0, 243, 255, 0.2); }
+        .form-row { display: flex; gap: 10px; margin-bottom: 12px;}
+        .form-group { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 12px; color: #a0a0a0; font-weight: 600;}
+        .form-group input { padding: 6px; }
     </style>
 </head>
 <body>
@@ -254,8 +213,8 @@
             </div>
             
             <div class="control-row">
-                <div class="control-group" title="数值越大，曲线越饱满；数值越小，曲线越紧贴直线 (范围 0.01 ~ 1.5)">
-                    <label style="color:var(--neon-cyan); text-shadow: 0 0 5px var(--neon-cyan);">🪢 TENSION：</label>
+                <div class="control-group" title="全局默认张力 (将被分段配置覆盖)">
+                    <label style="color:var(--neon-cyan); text-shadow: 0 0 5px var(--neon-cyan);">🪢 GLOBAL TENSION：</label>
                     <input type="range" id="curveWeightSlider" min="0.01" max="1.5" step="0.01" value="0.4" oninput="syncCurveWeight('slider')">
                     <input type="number" id="curveWeightInput" value="0.4" step="0.01" style="width: 50px;" oninput="syncCurveWeight('input')">
                 </div>
@@ -273,7 +232,7 @@
             </div>
             <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); width: 100%; margin: 5px 0;">
             <div class="control-row">
-                <div class="control-group"><button id="btnBindFolder" class="btn-folder" onclick="bindProjectFolder()">📁 BIND DEPLOY DIR</button><span id="folderStatus" style="font-size: 12px; color: #888;">No Directory Bound. Exporting to Downloads.</span></div>
+                <div class="control-group"><button id="btnBindFolder" class="btn-folder" onclick="bindProjectFolder()">📁 BIND DEPLOY DIR</button><span id="folderStatus" style="font-size: 12px; color: #888;">No Directory Bound.</span></div>
                 <div style="flex: 1;"></div> 
                 <div class="control-group">
                     <button class="btn-secondary" onclick="document.getElementById('importFile').click()">⬆️ IMPORT JSON</button>
@@ -282,50 +241,30 @@
                 </div>
             </div>
         </div>
+
+        <div class="controls-card" id="timelineCard" style="display: none; padding: 15px;">
+            <div style="color: var(--neon-yellow); font-family: 'Orbitron'; font-weight: bold; margin-bottom: 10px; font-size: 15px;">
+                📜 ROUTE TIMELINE
+                <span style="font-size: 11px; color:#aaa; font-weight: normal; margin-left:10px;">Click canvas to add nodes.</span>
+            </div>
+            <div id="timelineContainer">
+                <!-- 动态生成的 Node 与 Path 交织列表 -->
+            </div>
+        </div>
+
         <textarea id="outputCode" readonly></textarea>
     </div>
 
+    <!-- PID 弹窗保留 -->
     <div id="pidModal" class="modal-overlay">
-        <div class="modal-card" style="width: 320px;">
+        <div class="modal-card">
             <h3 style="color: #ff5722; border-color: #ff5722;">⚙️ PID TUNER</h3>
             <div class="form-row"><div class="form-group"><label>Proportional (kP):</label><input type="number" id="pidP" step="0.1" value="4.5"></div></div>
             <div class="form-row"><div class="form-group"><label>Integral (kI):</label><input type="number" id="pidI" step="0.01" value="0.1"></div></div>
             <div class="form-row"><div class="form-group"><label>Derivative (kD):</label><input type="number" id="pidD" step="0.01" value="0.1"></div></div>
-            <div class="modal-actions" style="justify-content: flex-end;"><button class="btn-secondary" onclick="closePidModal()">CANCEL</button><button onclick="savePidData()">CONFIRM</button></div>
-        </div>
-    </div>
-
-    <div id="pointModal" class="modal-overlay">
-        <div class="modal-card">
-            <h3 id="modalTitle">WAYPOINT DATA</h3>
-            <div class="form-row">
-                <div class="form-group"><label id="lblXPos">X Pos (m):</label><input type="number" id="inputX" step="0.01"></div>
-                <div class="form-group"><label id="lblYPos">Y Pos (m):</label><input type="number" id="inputY" step="0.01"></div>
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group highlight-red"><label>Heading IN (°):</label><input type="number" id="inputHeading" step="0.1"></div>
-                <div class="form-group highlight-purple" id="outHeadingGroup"><label>Heading OUT (°):</label><input type="number" id="inputHeadingOut" step="0.1" placeholder="Blank = Sync"></div>
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group highlight-yellow"><label>Chassis Rotation (°):</label><input type="number" id="inputRotation" step="0.1"></div>
-                <div class="form-group"><label>Max Speed (m/s):</label><input type="number" id="inputSpeed" step="0.1"></div>
-            </div>
-
-            <div class="form-group checkbox-group" style="border-color: rgba(255, 42, 42, 0.4);">
-                <input type="checkbox" id="inputIsStop" style="accent-color: var(--neon-red);">
-                <label for="inputIsStop" style="color:var(--neon-red) !important; text-shadow: 0 0 5px rgba(255,42,42,0.5);">🛑 Stop At End</label>
-            </div>
-            
-            <div class="form-group checkbox-group" style="border-color: rgba(0, 243, 255, 0.4); margin-top: 5px;">
-                <input type="checkbox" id="inputDisconnectNext" style="accent-color: var(--neon-cyan);">
-                <label for="inputDisconnectNext" style="color:var(--neon-cyan) !important; text-shadow: 0 0 5px rgba(0,243,255,0.5);">✂️ Disconnect Next Path</label>
-            </div>
-            
-            <div class="modal-actions">
-                <div class="modal-actions-left"><button id="btnMoveUp" class="btn-secondary" onclick="movePoint(-1)">⬆️ UP</button><button id="btnMoveDown" class="btn-secondary" onclick="movePoint(1)">⬇️ DOWN</button></div>
-                <div class="modal-actions-right"><button id="btnDeletePoint" class="btn-danger" onclick="deleteCurrentModalPoint()">DELETE</button><button class="btn-secondary" onclick="closeModal()">CANCEL</button><button onclick="saveModalData()">APPLY</button></div>
+            <div style="display:flex; justify-content: flex-end; gap:10px; margin-top:15px;">
+                <button class="btn-secondary" onclick="closePidModal()">CANCEL</button>
+                <button onclick="savePidData()">CONFIRM</button>
             </div>
         </div>
     </div>
@@ -333,52 +272,28 @@
     <script>
         const canvas = document.getElementById('fieldCanvas'); const ctx = canvas.getContext('2d'); const output = document.getElementById('outputCode'); const fieldSelect = document.getElementById('fieldSelect'); const robotLengthInput = document.getElementById('robotLength'); const robotWidthInput = document.getElementById('robotWidth'); const saveNameInput = document.getElementById('saveNameInput'); const savedPathsDropdown = document.getElementById('savedPathsDropdown'); const btnSimulate = document.getElementById('btnSimulate'); const statusTip = document.getElementById('statusTip');
         const curveWeightInput = document.getElementById('curveWeightInput'); const curveWeightSlider = document.getElementById('curveWeightSlider');
-        const pointModal = document.getElementById('pointModal'); const modalTitle = document.getElementById('modalTitle'); const inputX = document.getElementById('inputX'); const inputY = document.getElementById('inputY'); const inputHeading = document.getElementById('inputHeading'); const inputHeadingOut = document.getElementById('inputHeadingOut'); const inputRotation = document.getElementById('inputRotation'); const inputSpeed = document.getElementById('inputSpeed'); const inputIsStop = document.getElementById('inputIsStop'); 
-        const inputDisconnectNext = document.getElementById('inputDisconnectNext'); 
-        const btnDeletePoint = document.getElementById('btnDeletePoint'); const btnMoveUp = document.getElementById('btnMoveUp'); const btnMoveDown = document.getElementById('btnMoveDown');
         const pidModal = document.getElementById('pidModal'); const pidP = document.getElementById('pidP'); const pidI = document.getElementById('pidI'); const pidD = document.getElementById('pidD');
         
-        // 🚀 核心修改：将 const 修改为 let 以支持动态修改
         let FIELD_WIDTH = 17.55; let FIELD_HEIGHT = 8.05; 
         const LOCAL_STORAGE_KEY = "frc_architect_paths";
 
-        let keyWaypoints = []; let pathSegments = []; let hoveredIndex = -1; let activeEditIndex = -1; let isDragging = false; let draggedIndex = -1; let dragStartX = 0; let dragStartY = 0; let hasDragged = false; 
+        let keyWaypoints = []; let pathSegments = []; let hoveredIndex = -1; let isDragging = false; let draggedIndex = -1; let dragStartX = 0; let dragStartY = 0; let hasDragged = false; 
         let globalBrakePID = { p: 4.5, i: 0.1, d: 0.1 }; let globalCurveWeight = 0.4; 
+        
+        // 🚀 模拟器全局变量更新，支持单独片段状态管理
         let isSimulating = false; let simPoints = []; let simTotalTime = 0; let simStartTime = 0; let animFrameId = null;
+        let activeSimPoints = []; let activeSimTotalTime = 0; // 单独或全局模拟正在使用的数据
+        
         let targetDirectoryHandle = null; const bgImg = new Image();
 
-        // 🚀 核心修改：根据真实的 HTML DOM ClientRect 进行鼠标位置换算，避免 CSS 拉伸时发生坐标偏移
-        function getFieldCoords(mouseX, mouseY, rect) { 
-            return { 
-                x: FIELD_WIDTH - (mouseY / rect.height) * FIELD_WIDTH, 
-                y: FIELD_HEIGHT - (mouseX / rect.width) * FIELD_HEIGHT 
-            }; 
-        }
-        function getCanvasCoords(ptX, ptY) { 
-            return { 
-                px: canvas.width - (ptY / FIELD_HEIGHT) * canvas.width, 
-                py: canvas.height - (ptX / FIELD_WIDTH) * canvas.height 
-            }; 
-        }
+        function getFieldCoords(mouseX, mouseY, rect) { return { x: FIELD_WIDTH - (mouseY / rect.height) * FIELD_WIDTH, y: FIELD_HEIGHT - (mouseX / rect.width) * FIELD_HEIGHT }; }
+        function getCanvasCoords(ptX, ptY) { return { px: canvas.width - (ptY / FIELD_HEIGHT) * canvas.width, py: canvas.height - (ptX / FIELD_WIDTH) * canvas.height }; }
 
-        // 🚀 新增功能：动态更新场地尺寸和画布分辨率比
         function updateFieldSize() {
-            FIELD_WIDTH = parseFloat(document.getElementById('fieldLength').value) || 17.55;
-            FIELD_HEIGHT = parseFloat(document.getElementById('fieldWidth').value) || 8.05;
-            
-            // 动态调整画布真实高度，基于宽度323px去按真实的物理比例缩放。
-            // 这样能确保画布坐标系X和Y物理间距对等，机器人在绘制旋转时绝对不会因为比例拉伸而变形！
+            FIELD_WIDTH = parseFloat(document.getElementById('fieldLength').value) || 17.55; FIELD_HEIGHT = parseFloat(document.getElementById('fieldWidth').value) || 8.05;
             canvas.height = canvas.width * (FIELD_WIDTH / FIELD_HEIGHT);
-            
-            // 更新 UI 和提示
             statusTip.innerHTML = `SYSTEM.READY // PASS PLANNER<br><span style="color:#888">Y=0 Driver Station | X=${FIELD_WIDTH.toFixed(2)} Far End</span>`;
-            document.getElementById('lblXPos').innerText = `X Pos (0~${FIELD_WIDTH.toFixed(2)}m):`;
-            document.getElementById('lblYPos').innerText = `Y Pos (0~${FIELD_HEIGHT.toFixed(2)}m):`;
-            
-            if(bgImg.complete) {
-                recalculatePath();
-                drawPoints();
-            }
+            if(bgImg.complete) { recalculatePath(); drawPoints(); }
         }
 
         const DB_NAME = "PassPlannerDB"; const STORE_NAME = "SysHandles";
@@ -386,99 +301,198 @@
         async function saveDirHandleToDB(handle) { let db = await initDB(); let tx = db.transaction(STORE_NAME, 'readwrite'); tx.objectStore(STORE_NAME).put(handle, 'deployDir'); return tx.complete; }
         async function getDirHandleFromDB() { let db = await initDB(); return new Promise(res => { let req = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get('deployDir'); req.onsuccess = e => res(e.target.result); req.onerror = () => res(null); }); }
 
-        window.onload = () => { 
-            refreshSavedPathsDropdown(); 
-            bgImg.src = fieldSelect.value; 
-            updateFieldSize(); // 初始化画布比例
-            getDirHandleFromDB().then(handle => { if (handle) { targetDirectoryHandle = handle; document.getElementById('btnBindFolder').innerText = "✅ BOUND: " + handle.name; document.getElementById('btnBindFolder').style.backgroundColor = "rgba(0, 243, 255, 0.2)"; document.getElementById('folderStatus').innerText = "Directory recovered. Grant permission if prompted on first export."; document.getElementById('folderStatus').style.color = "#00f3ff"; } });
-        };
+        window.onload = () => { refreshSavedPathsDropdown(); bgImg.src = fieldSelect.value; updateFieldSize(); getDirHandleFromDB().then(handle => { if (handle) { targetDirectoryHandle = handle; document.getElementById('btnBindFolder').innerText = "✅ BOUND: " + handle.name; document.getElementById('btnBindFolder').style.backgroundColor = "rgba(0, 243, 255, 0.2)"; document.getElementById('folderStatus').innerText = "Directory recovered."; document.getElementById('folderStatus').style.color = "#00f3ff"; } }); };
         fieldSelect.addEventListener('change', () => { bgImg.src = fieldSelect.value; }); bgImg.onload = () => { drawPoints(); };
 
-        function syncCurveWeight(source) { if (source === 'slider') { curveWeightInput.value = curveWeightSlider.value; } else if (source === 'input') { curveWeightSlider.value = curveWeightInput.value; } globalCurveWeight = parseFloat(curveWeightInput.value) || 0.4; recalculatePath(); }
+        function syncCurveWeight(source) { 
+            if (source === 'slider') { curveWeightInput.value = curveWeightSlider.value; } 
+            else if (source === 'input') { curveWeightSlider.value = curveWeightInput.value; } 
+            globalCurveWeight = parseFloat(curveWeightInput.value) || 0.4; 
+            keyWaypoints.forEach(pt => {
+                if (pt.customTension === undefined) { pt.customTension = (pt.tensionOut !== globalCurveWeight || pt.tensionIn !== globalCurveWeight); }
+                if (pt.customTension === false) { pt.tensionOut = globalCurveWeight; pt.tensionIn = globalCurveWeight; }
+            });
+            renderRouteTimeline(); recalculatePath(); 
+        }
+
         function getSavedPathsObj() { return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "{}"); }
         function refreshSavedPathsDropdown() { let pathsObj = getSavedPathsObj(); savedPathsDropdown.innerHTML = '<option value="">-- DB LOAD --</option>'; for (let name in pathsObj) { let opt = document.createElement('option'); opt.value = name; opt.innerText = name; savedPathsDropdown.appendChild(opt); } }
         function savePathToLocal() { let name = saveNameInput.value.trim(); if (!name) return alert("请输入路线名称！"); let pathsObj = getSavedPathsObj(); pathsObj[name] = { waypoints: keyWaypoints, pid: globalBrakePID, curveWeight: globalCurveWeight }; localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(pathsObj)); refreshSavedPathsDropdown(); savedPathsDropdown.value = name; }
-        function loadPathFromLocal() { let name = savedPathsDropdown.value; if (!name) return; let data = getSavedPathsObj()[name]; if (data.waypoints) { keyWaypoints = data.waypoints; if (data.pid) globalBrakePID = data.pid; if (data.curveWeight) { globalCurveWeight = data.curveWeight; curveWeightInput.value = globalCurveWeight; curveWeightSlider.value = globalCurveWeight; } } else { keyWaypoints = data; } saveNameInput.value = name; recalculatePath(); }
+        function loadPathFromLocal() { let name = savedPathsDropdown.value; if (!name) return; let data = getSavedPathsObj()[name]; if (data.waypoints) { keyWaypoints = data.waypoints; if (data.pid) globalBrakePID = data.pid; if (data.curveWeight) { globalCurveWeight = data.curveWeight; curveWeightInput.value = globalCurveWeight; curveWeightSlider.value = globalCurveWeight; } } else { keyWaypoints = data; } saveNameInput.value = name; renderRouteTimeline(); recalculatePath(); }
         function deletePathFromLocal() { let name = savedPathsDropdown.value; if (!name) return; if (confirm(`彻底删除缓存 [${name}]？`)) { let pathsObj = getSavedPathsObj(); delete pathsObj[name]; localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(pathsObj)); refreshSavedPathsDropdown(); if (saveNameInput.value === name) saveNameInput.value = ""; clearPoints(); } }
 
-        async function bindProjectFolder() { try { targetDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); await saveDirHandleToDB(targetDirectoryHandle); document.getElementById('btnBindFolder').innerText = "✅ BOUND: " + targetDirectoryHandle.name; document.getElementById('btnBindFolder').style.backgroundColor = "rgba(0, 243, 255, 0.2)"; document.getElementById('folderStatus').innerText = "Export will write directly to this path. Persists after refresh!"; document.getElementById('folderStatus').style.color = "#00f3ff"; } catch (err) { console.log("未绑定", err); } }
+        async function bindProjectFolder() { try { targetDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); await saveDirHandleToDB(targetDirectoryHandle); document.getElementById('btnBindFolder').innerText = "✅ BOUND: " + targetDirectoryHandle.name; document.getElementById('btnBindFolder').style.backgroundColor = "rgba(0, 243, 255, 0.2)"; document.getElementById('folderStatus').innerText = "Export will write directly to this path."; document.getElementById('folderStatus').style.color = "#00f3ff"; } catch (err) { console.log("未绑定", err); } }
         async function verifyPermission(fileHandle) { const options = { mode: 'readwrite' }; if ((await fileHandle.queryPermission(options)) === 'granted') { return true; } if ((await fileHandle.requestPermission(options)) === 'granted') { return true; } return false; }
-        async function writeToFile(fileName, jsonString) { if (targetDirectoryHandle) { try { const isGranted = await verifyPermission(targetDirectoryHandle); if (!isGranted) throw new Error("Permission Denied"); const fileHandle = await targetDirectoryHandle.getFileHandle(fileName, { create: true }); const writable = await fileHandle.createWritable(); await writable.write(jsonString); await writable.close(); document.getElementById('folderStatus').innerText = `✅ [${fileName}] COMPILED AND INJECTED!`; document.getElementById('folderStatus').style.color = "#39ff14"; setTimeout(() => { document.getElementById('folderStatus').innerText = "Export will write directly to this path. Persists after refresh!"; document.getElementById('folderStatus').style.color = "#00f3ff"; }, 3000); return; } catch (err) { console.error("无权限", err); alert("权限被拒绝！请重新绑定目录。"); } } let blob = new Blob([jsonString], { type: "application/json" }); let a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fileName; a.click(); }
+        async function writeToFile(fileName, jsonString) { if (targetDirectoryHandle) { try { const isGranted = await verifyPermission(targetDirectoryHandle); if (!isGranted) throw new Error("Permission Denied"); const fileHandle = await targetDirectoryHandle.getFileHandle(fileName, { create: true }); const writable = await fileHandle.createWritable(); await writable.write(jsonString); await writable.close(); document.getElementById('folderStatus').innerText = `✅ [${fileName}] EXPORTED!`; document.getElementById('folderStatus').style.color = "#39ff14"; setTimeout(() => { document.getElementById('folderStatus').innerText = "Ready."; document.getElementById('folderStatus').style.color = "#00f3ff"; }, 3000); return; } catch (err) { alert("权限拒绝！"); } } let blob = new Blob([jsonString], { type: "application/json" }); let a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fileName; a.click(); }
 
         async function exportRobotJSON() {
             if (pathSegments.length === 0) return alert("画板为空！"); let name = saveNameInput.value.trim() || "AutoPath"; let fileName = `${name}.json`;
             let robotData = { 
                 name: name, brakePID: globalBrakePID, curveWeight: globalCurveWeight, waypoints: keyWaypoints, 
-                segments: pathSegments.map((seg) => { 
-                    return { xArray: seg.map(pt => pt.x), yArray: seg.map(pt => pt.y), rotArray: seg.map(pt => pt.rotation), speedArray: seg.map(pt => pt.speed), stopAtEnd: seg.stopAtEnd }; 
+                segments: pathSegments.map((seg, idx) => { 
+                    let realIndex = seg.waypointIndex; let p0 = keyWaypoints[realIndex];
+                    return { xArray: seg.map(pt => pt.x), yArray: seg.map(pt => pt.y), rotArray: seg.map(pt => pt.rotation), speedArray: seg.map(pt => pt.speed), stopAtEnd: seg.stopAtEnd, maxAccel: p0.maxAccel !== undefined ? p0.maxAccel : 5.0, mainSpeedIsStart: p0.mainSpeedIsStart !== undefined ? p0.mainSpeedIsStart : true }; 
                 }) 
             };
             await writeToFile(fileName, JSON.stringify(robotData, null, 2));
         }
-        function importJSON(event) { let file = event.target.files[0]; if (!file) return; let reader = new FileReader(); reader.onload = function(e) { try { let parsed = JSON.parse(e.target.result); if (parsed.waypoints) { keyWaypoints = parsed.waypoints; if (parsed.brakePID) globalBrakePID = parsed.brakePID; if (parsed.curveWeight) { globalCurveWeight = parsed.curveWeight; curveWeightInput.value = globalCurveWeight; curveWeightSlider.value = globalCurveWeight; } saveNameInput.value = parsed.name || file.name.replace(".json", ""); recalculatePath(); event.target.value = ''; } else { alert("此 JSON 不包含网页编辑所需的锚点数据！"); } } catch (err) { alert("JSON 解析失败！"); } }; reader.readAsText(file); }
+
+        function importJSON(event) { let file = event.target.files[0]; if (!file) return; let reader = new FileReader(); reader.onload = function(e) { try { let parsed = JSON.parse(e.target.result); if (parsed.waypoints) { keyWaypoints = parsed.waypoints; if (parsed.brakePID) globalBrakePID = parsed.brakePID; if (parsed.curveWeight) { globalCurveWeight = parsed.curveWeight; curveWeightInput.value = globalCurveWeight; curveWeightSlider.value = globalCurveWeight; } saveNameInput.value = parsed.name || file.name.replace(".json", ""); renderRouteTimeline(); recalculatePath(); event.target.value = ''; } else { alert("此 JSON 不包含所需数据！"); } } catch (err) { alert("JSON 解析失败！"); } }; reader.readAsText(file); }
         function openPidModal() { pidP.value = globalBrakePID.p; pidI.value = globalBrakePID.i; pidD.value = globalBrakePID.d; pidModal.style.display = "flex"; }
         function closePidModal() { pidModal.style.display = "none"; }
         function savePidData() { globalBrakePID.p = parseFloat(pidP.value) || 0; globalBrakePID.i = parseFloat(pidI.value) || 0; globalBrakePID.d = parseFloat(pidD.value) || 0; closePidModal(); recalculatePath(); }
 
         canvas.addEventListener('mousemove', function(event) { 
-            if(isSimulating) return; 
-            const rect = canvas.getBoundingClientRect(); 
-            // 🚀 确保传入真实的 rect 数据以进行等比计算
-            let fieldPos = getFieldCoords(event.clientX - rect.left, event.clientY - rect.top, rect); 
-            
+            if(isSimulating) return; const rect = canvas.getBoundingClientRect(); let fieldPos = getFieldCoords(event.clientX - rect.left, event.clientY - rect.top, rect); 
             if (isDragging && draggedIndex !== -1) { 
                 if (!hasDragged && Math.hypot(fieldPos.x - dragStartX, fieldPos.y - dragStartY) > 0.05) { hasDragged = true; canvas.style.cursor = 'grabbing'; } 
-                if (hasDragged) { keyWaypoints[draggedIndex].x = parseFloat(Math.max(0, Math.min(FIELD_WIDTH, fieldPos.x)).toFixed(2)); keyWaypoints[draggedIndex].y = parseFloat(Math.max(0, Math.min(FIELD_HEIGHT, fieldPos.y)).toFixed(2)); recalculatePath(); } 
-                return; 
+                if (hasDragged) { 
+                    keyWaypoints[draggedIndex].x = parseFloat(Math.max(0, Math.min(FIELD_WIDTH, fieldPos.x)).toFixed(2)); 
+                    keyWaypoints[draggedIndex].y = parseFloat(Math.max(0, Math.min(FIELD_HEIGHT, fieldPos.y)).toFixed(2)); 
+                    let xInput = document.getElementById(`list-x-${draggedIndex}`); let yInput = document.getElementById(`list-y-${draggedIndex}`);
+                    if(xInput) xInput.value = keyWaypoints[draggedIndex].x; if(yInput) yInput.value = keyWaypoints[draggedIndex].y;
+                    recalculatePath(); 
+                } return; 
             } 
-            let found = -1; 
-            for (let i = 0; i < keyWaypoints.length; i++) { 
-                if (Math.hypot(keyWaypoints[i].x - fieldPos.x, keyWaypoints[i].y - fieldPos.y) < 0.35) { found = i; break; } 
-            } 
+            let found = -1; for (let i = 0; i < keyWaypoints.length; i++) { if (Math.hypot(keyWaypoints[i].x - fieldPos.x, keyWaypoints[i].y - fieldPos.y) < 0.35) { found = i; break; } } 
             if (found !== hoveredIndex) { hoveredIndex = found; canvas.style.cursor = (hoveredIndex !== -1) ? 'grab' : 'crosshair'; drawPoints(); } 
         });
-        
-        canvas.addEventListener('mousedown', function(event) { 
-            if(isSimulating) return; 
-            const rect = canvas.getBoundingClientRect(); 
-            let fieldPos = getFieldCoords(event.clientX - rect.left, event.clientY - rect.top, rect); 
-            
-            if (hoveredIndex !== -1) { isDragging = true; draggedIndex = hoveredIndex; dragStartX = fieldPos.x; dragStartY = fieldPos.y; hasDragged = false; } 
-            else { openModalForNewPoint(parseFloat(fieldPos.x.toFixed(2)), parseFloat(fieldPos.y.toFixed(2))); } 
-        });
-        
-        window.addEventListener('mouseup', function(event) { if(isSimulating) return; if (isDragging) { isDragging = false; canvas.style.cursor = (hoveredIndex !== -1) ? 'grab' : 'crosshair'; if (!hasDragged && draggedIndex !== -1) openModalForEdit(draggedIndex); draggedIndex = -1; } });
 
-        function openModalForNewPoint(x, y) { 
-            activeEditIndex = -1; modalTitle.innerText = "➕ ADD WAYPOINT"; inputX.value = x; inputY.value = y; inputHeading.value = 0.0; 
-            inputHeadingOut.value = ""; 
-            inputRotation.value = 0.0; inputSpeed.value = 3.0; inputIsStop.checked = (keyWaypoints.length === 0); inputDisconnectNext.checked = false; 
-            btnDeletePoint.style.display = "none"; btnMoveUp.style.display = "none"; btnMoveDown.style.display = "none"; pointModal.style.display = "flex"; 
+        canvas.addEventListener('mousedown', function(event) { 
+            if(isSimulating) return; const rect = canvas.getBoundingClientRect(); let fieldPos = getFieldCoords(event.clientX - rect.left, event.clientY - rect.top, rect); 
+            if (hoveredIndex !== -1) { 
+                isDragging = true; draggedIndex = hoveredIndex; dragStartX = fieldPos.x; dragStartY = fieldPos.y; hasDragged = false; 
+                let card = document.getElementById(`node-card-${hoveredIndex}`);
+                if(card) { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); card.classList.add('active'); }
+            } else { addPoint(parseFloat(fieldPos.x.toFixed(2)), parseFloat(fieldPos.y.toFixed(2))); } 
+        });
+
+        window.addEventListener('mouseup', function(event) { 
+            if(isSimulating) return; 
+            if (isDragging) { 
+                isDragging = false; canvas.style.cursor = (hoveredIndex !== -1) ? 'grab' : 'crosshair'; 
+                let card = document.getElementById(`node-card-${draggedIndex}`);
+                if(card) card.classList.remove('active');
+                draggedIndex = -1; 
+            } 
+        });
+
+        function addPoint(x, y) {
+            let prevHeading = keyWaypoints.length > 0 ? keyWaypoints[keyWaypoints.length-1].heading : 0;
+            let newPt = { 
+                x: x, y: y, heading: prevHeading, headingOut: prevHeading, rotation: prevHeading, speed: 3.0, 
+                isStop: keyWaypoints.length === 0, disconnectNext: false, 
+                maxAccel: 5.0, mainSpeedIsStart: true, tensionOut: globalCurveWeight, tensionIn: globalCurveWeight, customTension: false 
+            }; 
+            keyWaypoints.push(newPt); renderRouteTimeline(); recalculatePath(); 
+            let container = document.getElementById('timelineContainer'); setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
         }
-        function openModalForEdit(index) { 
-            activeEditIndex = index; modalTitle.innerText = `✏️ EDIT NODE [${index + 1}]`; let pt = keyWaypoints[index]; inputX.value = pt.x; inputY.value = pt.y; inputHeading.value = pt.heading; 
-            inputHeadingOut.value = (pt.headingOut !== undefined && pt.headingOut !== pt.heading) ? pt.headingOut : ""; 
-            inputRotation.value = pt.rotation !== undefined ? pt.rotation : pt.heading; inputSpeed.value = pt.speed; inputIsStop.checked = pt.isStop; inputDisconnectNext.checked = pt.disconnectNext === true; 
-            btnDeletePoint.style.display = "inline-block"; btnMoveUp.style.display = (index > 0) ? "inline-block" : "none"; btnMoveDown.style.display = (index < keyWaypoints.length - 1) ? "inline-block" : "none"; pointModal.style.display = "flex"; 
+
+        function movePoint(index, dir) { 
+            let targetIdx = index + dir; 
+            if (targetIdx >= 0 && targetIdx < keyWaypoints.length) { 
+                let temp = keyWaypoints[index]; keyWaypoints[index] = keyWaypoints[targetIdx]; keyWaypoints[targetIdx] = temp; 
+                renderRouteTimeline(); recalculatePath(); 
+            } 
         }
-        function movePoint(dir) { if (activeEditIndex < 0) return; let targetIdx = activeEditIndex + dir; if (targetIdx >= 0 && targetIdx < keyWaypoints.length) { let temp = keyWaypoints[activeEditIndex]; keyWaypoints[activeEditIndex] = keyWaypoints[targetIdx]; keyWaypoints[targetIdx] = temp; activeEditIndex = targetIdx; openModalForEdit(activeEditIndex); recalculatePath(); } }
-        function closeModal() { pointModal.style.display = "none"; }
-        
-        function saveModalData() { 
-            let x = parseFloat(inputX.value); let y = parseFloat(inputY.value); 
-            let heading = parseFloat(inputHeading.value); 
-            let headingOut = parseFloat(inputHeadingOut.value); 
-            if (isNaN(headingOut)) headingOut = heading; 
-            let rotation = parseFloat(inputRotation.value); let speed = parseFloat(inputSpeed.value); 
-            let isStop = inputIsStop.checked; let disconnectNext = inputDisconnectNext.checked;
+        function deletePoint(index) { keyWaypoints.splice(index, 1); hoveredIndex = -1; renderRouteTimeline(); recalculatePath(); }
+
+        function renderRouteTimeline() {
+            const container = document.getElementById('timelineContainer');
+            const card = document.getElementById('timelineCard');
+            container.innerHTML = '';
             
-            if (isNaN(x) || isNaN(y) || isNaN(heading) || isNaN(rotation) || isNaN(speed)) return alert("INVALID DATA"); 
-            // 🚀 这里也会根据动态改变后的 FIELD_WIDTH 去夹逼防止输入越界
-            let newPt = { x: parseFloat(Math.max(0, Math.min(FIELD_WIDTH, x)).toFixed(2)), y: parseFloat(Math.max(0, Math.min(FIELD_HEIGHT, y)).toFixed(2)), heading: parseFloat(heading.toFixed(1)), headingOut: parseFloat(headingOut.toFixed(1)), rotation: parseFloat(rotation.toFixed(1)), speed: parseFloat(speed.toFixed(2)), isStop: isStop, disconnectNext: disconnectNext }; 
-            if (activeEditIndex >= 0) keyWaypoints[activeEditIndex] = newPt; else keyWaypoints.push(newPt); 
-            closeModal(); recalculatePath(); 
+            if (keyWaypoints.length === 0) { card.style.display = 'none'; return; }
+            card.style.display = 'flex';
+
+            for (let i = 0; i < keyWaypoints.length; i++) {
+                let pt = keyWaypoints[i];
+                let isStopChecked = pt.isStop ? 'checked' : '';
+                let isDiscChecked = pt.disconnectNext ? 'checked' : '';
+
+                let nodeDiv = document.createElement('div');
+                nodeDiv.className = 'node-item';
+                nodeDiv.id = `node-card-${i}`;
+                nodeDiv.innerHTML = `
+                    <div class="node-header">
+                        <span>📍 NODE [${i}]</span>
+                        <div style="display:flex; gap:5px;">
+                            ${i > 0 ? `<button class="btn-icon" onclick="movePoint(${i}, -1)">⬆️</button>` : ''}
+                            ${i < keyWaypoints.length - 1 ? `<button class="btn-icon" onclick="movePoint(${i}, 1)">⬇️</button>` : ''}
+                            <button class="btn-icon danger" onclick="deletePoint(${i})">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="timeline-controls" style="margin-bottom: 8px;">
+                        <div class="form-group"><label>X Pos</label><input type="number" id="list-x-${i}" step="0.01" value="${pt.x}" onchange="updateNodeData(${i}, 'x', this.value)"></div>
+                        <div class="form-group"><label>Y Pos</label><input type="number" id="list-y-${i}" step="0.01" value="${pt.y}" onchange="updateNodeData(${i}, 'y', this.value)"></div>
+                        <div class="form-group"><label style="color:var(--neon-red)">Head IN</label><input type="number" step="0.1" value="${pt.heading}" onchange="updateNodeData(${i}, 'heading', this.value)" style="border-color:var(--neon-red); color:var(--neon-red);"></div>
+                        <div class="form-group"><label style="color:var(--neon-magenta)">Head OUT</label><input type="number" id="list-hout-${i}" step="0.1" value="${pt.headingOut !== undefined ? pt.headingOut : pt.heading}" onchange="updateNodeData(${i}, 'headingOut', this.value)" style="border-color:var(--neon-magenta); color:var(--neon-magenta);"></div>
+                    </div>
+                    <div class="timeline-controls" style="align-items: center;">
+                        <div class="form-group"><label style="color:var(--neon-yellow)">Chassis Rot</label><input type="number" step="0.1" value="${pt.rotation !== undefined ? pt.rotation : pt.heading}" onchange="updateNodeData(${i}, 'rotation', this.value)" style="border-color:var(--neon-yellow); color:var(--neon-yellow);"></div>
+                        <div class="form-group"><label>Speed (m/s)</label><input type="number" step="0.1" value="${pt.speed}" onchange="updateNodeData(${i}, 'speed', this.value)"></div>
+                        
+                        <label class="inline-checkbox" style="border-color: rgba(255, 42, 42, 0.4); margin-top:14px;">
+                            <input type="checkbox" ${isStopChecked} onchange="updateNodeData(${i}, 'isStop', this.checked)"> 
+                            <span style="color:var(--neon-red);">🛑 Stop</span>
+                        </label>
+                        <label class="inline-checkbox" style="border-color: rgba(0, 243, 255, 0.4); margin-top:14px;">
+                            <input type="checkbox" ${isDiscChecked} onchange="updateNodeData(${i}, 'disconnectNext', this.checked)"> 
+                            <span style="color:var(--neon-cyan);">✂️ Cut</span>
+                        </label>
+                    </div>
+                `;
+                container.appendChild(nodeDiv);
+
+                if (!pt.disconnectNext && i < keyWaypoints.length - 1) {
+                    let segDiv = document.createElement('div');
+                    segDiv.className = 'segment-item';
+                    
+                    let maxA = pt.maxAccel !== undefined ? pt.maxAccel : 5.0;
+                    let msStart = pt.mainSpeedIsStart !== undefined ? pt.mainSpeedIsStart : true;
+                    let tOut = pt.tensionOut !== undefined ? pt.tensionOut : globalCurveWeight;
+                    let tIn = pt.tensionIn !== undefined ? pt.tensionIn : globalCurveWeight;
+
+                    segDiv.innerHTML = `
+                        <div class="segment-header">
+                            <span>〰️ PATH: NODE [${i}] ➔ NODE [${i+1}]</span>
+                            <button class="btn-icon" onclick="simulateSingleSegment(${i})" title="Simulate this segment only" style="font-size: 16px; color: var(--neon-cyan);">▶️</button>
+                        </div>
+                        <div class="timeline-controls">
+                            <div class="form-group"><label>Accel (m/s²)</label><input type="number" step="0.1" value="${maxA}" onchange="updateNodeData(${i}, 'maxAccel', this.value)"></div>
+                            <div class="form-group"><label>Main Speed Loc</label>
+                                <select onchange="updateNodeData(${i}, 'mainSpeedIsStart', this.value)">
+                                    <option value="true" ${msStart ? 'selected' : ''}>Start (Brake)</option>
+                                    <option value="false" ${!msStart ? 'selected' : ''}>End (Thrust)</option>
+                                </select>
+                            </div>
+                            <div class="form-group"><label>Tension OUT</label><input type="number" step="0.01" value="${tOut}" onchange="updateNodeData(${i}, 'tensionOut', this.value)"></div>
+                            <div class="form-group"><label>Tension IN</label><input type="number" step="0.01" value="${tIn}" onchange="updateNodeData(${i}, 'tensionIn', this.value)"></div>
+                        </div>
+                    `;
+                    container.appendChild(segDiv);
+                }
+            }
         }
-        function deleteCurrentModalPoint() { if (activeEditIndex >= 0) { keyWaypoints.splice(activeEditIndex, 1); hoveredIndex = -1; closeModal(); recalculatePath(); } }
+
+        function updateNodeData(index, key, value) {
+            let pt = keyWaypoints[index];
+            if (key === 'isStop' || key === 'disconnectNext') {
+                pt[key] = value; if(key === 'disconnectNext') renderRouteTimeline(); 
+            } else if (key === 'mainSpeedIsStart') {
+                pt[key] = (value === 'true');
+            } else {
+                let parsed = parseFloat(value);
+                if (!isNaN(parsed)) {
+                    if (key === 'heading' && pt.heading === pt.headingOut) {
+                        pt.headingOut = parsed; let outInput = document.getElementById(`list-hout-${index}`); if(outInput) outInput.value = parsed;
+                    }
+                    if (key === 'tensionOut' || key === 'tensionIn') { pt.customTension = true; }
+                    pt[key] = parsed;
+                }
+            }
+            recalculatePath(); 
+        }
 
         function recalculatePath() {
             pathSegments = []; simPoints = []; simTotalTime = 0; if (keyWaypoints.length === 0) { drawPoints(); generateJavaCode(); return; }
@@ -488,13 +502,15 @@
                 
                 if (p0.disconnectNext) { lastSimPt = null; continue; }
                 if(p0.rotation === undefined) p0.rotation = p0.heading; if(p1.rotation === undefined) p1.rotation = p1.heading;
+                
+                let tOut = p0.tensionOut !== undefined ? p0.tensionOut : globalCurveWeight;
+                let tIn = p0.tensionIn !== undefined ? p0.tensionIn : globalCurveWeight;
+
                 let tempSegmentPts = []; tempSegmentPts.push({...p0}); 
                 let dist = Math.hypot(p1.x - p0.x, p1.y - p0.y); 
-                let weight0 = dist * globalCurveWeight; let weight1 = dist * globalCurveWeight; 
+                let weight0 = dist * tOut; let weight1 = dist * tIn; 
 
-                let startHeading = p0.headingOut !== undefined ? p0.headingOut : p0.heading;
-                let endHeading = p1.heading;
-
+                let startHeading = p0.headingOut !== undefined ? p0.headingOut : p0.heading; let endHeading = p1.heading;
                 let rad0 = startHeading * Math.PI / 180; let rad1 = endHeading * Math.PI / 180; 
                 let cp0 = { x: p0.x + Math.cos(rad0) * weight0, y: p0.y + Math.sin(rad0) * weight0 }; 
                 let cp1 = { x: p1.x - Math.cos(rad1) * weight1, y: p1.y - Math.sin(rad1) * weight1 }; 
@@ -513,88 +529,181 @@
                         tempSegmentPts.push({ x: parseFloat(curX.toFixed(2)), y: parseFloat(curY.toFixed(2)), heading: parseFloat(interpHeading.toFixed(1)), rotation: parseFloat(interpRotation.toFixed(1)) }); accumulatedDist = 0; 
                     } lastPt = {x: curX, y: curY};
                 }
-                for (let j = 0; j < tempSegmentPts.length; j++) {
-                    let pt = tempSegmentPts[j]; let cruiseSpeed = p0.speed + (p1.speed - p0.speed) * (j / (tempSegmentPts.length - 1));
+
+                let size = tempSegmentPts.length;
+                let maxAccel = Math.abs(p0.maxAccel !== undefined ? p0.maxAccel : 5.0);
+                let mainSpeedIsStart = p0.mainSpeedIsStart !== undefined ? p0.mainSpeedIsStart : true;
+                let startSpeed = p0.speed; let endSpeed = p1.speed;
+
+                for (let j = 0; j < size; j++) tempSegmentPts[j].speed = 0.0;
+
+                if (size === 1) { tempSegmentPts[0].speed = mainSpeedIsStart ? startSpeed : endSpeed; } 
+                else if (size > 1) {
+                    if (mainSpeedIsStart) {
+                        tempSegmentPts[size - 1].speed = endSpeed; let isDeceleratingAtEnd = startSpeed > endSpeed;
+                        for (let j = size - 2; j >= 0; j--) {
+                            let ds = Math.hypot(tempSegmentPts[j+1].x - tempSegmentPts[j].x, tempSegmentPts[j+1].y - tempSegmentPts[j].y);
+                            let nextV = tempSegmentPts[j+1].speed;
+                            if (isDeceleratingAtEnd) { let reqV = Math.sqrt(nextV * nextV + 2 * maxAccel * ds); tempSegmentPts[j].speed = Math.min(startSpeed, reqV); } 
+                            else { let reqV = Math.sqrt(Math.max(0, nextV * nextV - 2 * maxAccel * ds)); tempSegmentPts[j].speed = Math.max(startSpeed, reqV); }
+                        }
+                    } else {
+                        tempSegmentPts[0].speed = startSpeed; let isAcceleratingAtStart = startSpeed < endSpeed;
+                        for (let j = 1; j < size; j++) {
+                            let ds = Math.hypot(tempSegmentPts[j].x - tempSegmentPts[j-1].x, tempSegmentPts[j].y - tempSegmentPts[j-1].y);
+                            let prevV = tempSegmentPts[j-1].speed;
+                            if (isAcceleratingAtStart) { let reqV = Math.sqrt(prevV * prevV + 2 * maxAccel * ds); tempSegmentPts[j].speed = Math.min(endSpeed, reqV); } 
+                            else { let reqV = Math.sqrt(Math.max(0, prevV * prevV - 2 * maxAccel * ds)); tempSegmentPts[j].speed = Math.max(endSpeed, reqV); }
+                        }
+                    }
+                }
+
+                for (let j = 0; j < size; j++) {
+                    let pt = tempSegmentPts[j]; let cruiseSpeed = pt.speed;
                     if (p1.isStop) {
-                        let remainingIntervals = (tempSegmentPts.length - 1) - j; let remainingArcLength = remainingIntervals * 0.15; let pidSpeed = globalBrakePID.p * remainingArcLength;
+                        let remainingIntervals = (size - 1) - j; let remainingArcLength = remainingIntervals * 0.15; let pidSpeed = globalBrakePID.p * remainingArcLength;
                         pt.speed = Math.min(cruiseSpeed, pidSpeed); if (remainingArcLength > 0.03 && pt.speed < 0.1) pt.speed = 0.1;
                     } else { pt.speed = cruiseSpeed; }
                     pt.speed = parseFloat(pt.speed.toFixed(2));
                     
-                    if (lastSimPt == null) { simPoints.push({...pt, time: accTime}); 
-                    } else { let realDist = Math.hypot(pt.x - lastSimPt.x, pt.y - lastSimPt.y); let avgSpeed = Math.max(0.1, (lastSimPt.speed + pt.speed) / 2); accTime += (realDist / avgSpeed); simPoints.push({...pt, time: accTime}); }
+                    if (lastSimPt == null) { simPoints.push({...pt, time: accTime}); } 
+                    else { let realDist = Math.hypot(pt.x - lastSimPt.x, pt.y - lastSimPt.y); let avgSpeed = Math.max(0.1, (lastSimPt.speed + pt.speed) / 2); accTime += (realDist / avgSpeed); simPoints.push({...pt, time: accTime}); }
                     lastSimPt = pt;
                 }
+                
                 tempSegmentPts.stopAtEnd = p1.isStop;
+                tempSegmentPts.waypointIndex = i; 
                 pathSegments.push(tempSegmentPts);
             }
             simTotalTime = accTime; if(!isSimulating) drawPoints(); generateJavaCode();
         }
 
-        function toggleSimulation() { if (pathSegments.length === 0) return alert("Empty Canvas!"); if (isSimulating) { isSimulating = false; cancelAnimationFrame(animFrameId); btnSimulate.innerText = "▶️ SIMULATE"; btnSimulate.style.backgroundColor = "rgba(0, 243, 255, 0.1)"; btnSimulate.style.color = "var(--neon-cyan)"; drawPoints(); } else { isSimulating = true; simStartTime = 0; btnSimulate.innerText = "⏹️ HALT SIM"; btnSimulate.style.backgroundColor = "var(--neon-red)"; btnSimulate.style.color = "#fff"; animFrameId = requestAnimationFrame(simulateFrame); } }
-        function simulateFrame(timestamp) { if (!isSimulating) return; if (!simStartTime) simStartTime = timestamp; let elapsed = (timestamp - simStartTime) / 1000.0; if (elapsed > simTotalTime) { toggleSimulation(); return; } statusTip.innerHTML = `⏱️ SIMULATING. TIME: <b style="color:var(--neon-cyan)">${elapsed.toFixed(2)}s</b> / ETA: <b style="color:var(--neon-cyan)">${simTotalTime.toFixed(2)}s</b>`; let currentRobotState = simPoints[simPoints.length - 1]; for (let i = 0; i < simPoints.length - 1; i++) { if (elapsed >= simPoints[i].time && elapsed <= simPoints[i+1].time) { let p1 = simPoints[i]; let p2 = simPoints[i+1]; let dt = p2.time - p1.time; let t = (dt === 0) ? 1 : (elapsed - p1.time) / dt; let rotDiff = p2.rotation - p1.rotation; if(rotDiff > 180) rotDiff -= 360; if(rotDiff < -180) rotDiff += 360; currentRobotState = { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t, rotation: p1.rotation + rotDiff * t }; break; } } drawSimulationFrame(currentRobotState, elapsed); animFrameId = requestAnimationFrame(simulateFrame); }
-        function drawSimulationFrame(robotState, elapsed) { ctx.clearRect(0, 0, canvas.width, canvas.height); if (bgImg.complete && bgImg.src) { ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.rotate(-Math.PI / 2); ctx.drawImage(bgImg, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width); ctx.restore(); } const scale = canvas.height / FIELD_WIDTH; let rLen = parseFloat(robotLengthInput.value) || 0.76; let rWid = parseFloat(robotWidthInput.value) || 0.76; let pxLen = rLen * scale; let pxWid = rWid * scale; ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)'; ctx.lineWidth = 1.5; pathSegments.forEach(seg => { ctx.beginPath(); seg.forEach((pt, index) => { let pos = getCanvasCoords(pt.x, pt.y); if (index === 0) ctx.moveTo(pos.px, pos.py); else ctx.lineTo(pos.px, pos.py); }); ctx.stroke(); }); let pos = getCanvasCoords(robotState.x, robotState.y); ctx.save(); ctx.translate(pos.px, pos.py); ctx.rotate(-Math.PI / 2 - robotState.rotation * Math.PI / 180); ctx.fillStyle = 'rgba(57, 255, 20, 0.3)'; ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2; ctx.shadowBlur = 10; ctx.shadowColor = '#39ff14'; ctx.fillRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid); ctx.strokeRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid); ctx.beginPath(); ctx.moveTo(pxLen / 2, -pxWid / 4); ctx.lineTo(pxLen / 2 + 12, 0); ctx.lineTo(pxLen / 2, pxWid / 4); ctx.closePath(); ctx.fillStyle = '#39ff14'; ctx.fill(); ctx.restore(); ctx.save(); ctx.fillStyle = "rgba(10, 11, 16, 0.85)"; ctx.fillRect(10, 10, 140, 36); ctx.strokeStyle = "#00f3ff"; ctx.lineWidth = 1; ctx.strokeRect(10, 10, 140, 36); ctx.font = "bold 20px 'Orbitron', monospace"; ctx.fillStyle = "#00f3ff"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(`⏱️ ${elapsed.toFixed(2)} s`, 15, 29); ctx.restore(); }
+        // ==========================================
+        // 🚀 核心更新：分离的仿真控制逻辑
+        // ==========================================
+        function startSimLoop() {
+            if(activeSimPoints.length === 0) return;
+            isSimulating = true; simStartTime = 0; 
+            btnSimulate.innerText = "⏹️ HALT SIM"; btnSimulate.style.backgroundColor = "var(--neon-red)"; btnSimulate.style.color = "#fff"; 
+            animFrameId = requestAnimationFrame(simulateFrame);
+        }
+
+        function toggleSimulation() { 
+            if (pathSegments.length === 0) return alert("Empty Canvas!"); 
+            if (isSimulating) { 
+                isSimulating = false; cancelAnimationFrame(animFrameId); btnSimulate.innerText = "▶️ SIMULATE"; btnSimulate.style.backgroundColor = "rgba(0, 243, 255, 0.1)"; btnSimulate.style.color = "var(--neon-cyan)"; drawPoints(); 
+            } else { 
+                activeSimPoints = simPoints; activeSimTotalTime = simTotalTime; startSimLoop(); 
+            } 
+        }
+
+        // 👉 单段独立仿真注入
+        function simulateSingleSegment(waypointIdx) {
+            if (isSimulating) { isSimulating = false; cancelAnimationFrame(animFrameId); drawPoints(); }
+            
+            let targetSeg = pathSegments.find(s => s.waypointIndex === waypointIdx);
+            if (!targetSeg) return alert("Segment not connected!");
+
+            activeSimPoints = [];
+            let accTime = 0; let lastPt = null;
+            
+            // 为这单一的段重新从 0 开始计算虚拟时间戳
+            for(let j=0; j < targetSeg.length; j++) {
+                let pt = targetSeg[j];
+                if(lastPt == null) {
+                    activeSimPoints.push({...pt, time: 0});
+                } else {
+                    let realDist = Math.hypot(pt.x - lastPt.x, pt.y - lastPt.y); 
+                    let avgSpeed = Math.max(0.1, (lastPt.speed + pt.speed) / 2); 
+                    accTime += (realDist / avgSpeed); 
+                    activeSimPoints.push({...pt, time: accTime});
+                }
+                lastPt = pt;
+            }
+            activeSimTotalTime = accTime;
+            startSimLoop();
+        }
+
+        function simulateFrame(timestamp) { 
+            if (!isSimulating) return; 
+            if (!simStartTime) simStartTime = timestamp; 
+            let elapsed = (timestamp - simStartTime) / 1000.0; 
+            
+            if (elapsed > activeSimTotalTime) { toggleSimulation(); return; } 
+            
+            statusTip.innerHTML = `⏱️ SIMULATING. TIME: <b style="color:var(--neon-cyan)">${elapsed.toFixed(2)}s</b> / ETA: <b style="color:var(--neon-cyan)">${activeSimTotalTime.toFixed(2)}s</b>`; 
+            
+            let currentRobotState = activeSimPoints[activeSimPoints.length - 1]; 
+            for (let i = 0; i < activeSimPoints.length - 1; i++) { 
+                if (elapsed >= activeSimPoints[i].time && elapsed <= activeSimPoints[i+1].time) { 
+                    let p1 = activeSimPoints[i]; let p2 = activeSimPoints[i+1]; 
+                    let dt = p2.time - p1.time; let t = (dt === 0) ? 1 : (elapsed - p1.time) / dt; 
+                    let rotDiff = p2.rotation - p1.rotation; 
+                    if(rotDiff > 180) rotDiff -= 360; if(rotDiff < -180) rotDiff += 360; 
+                    currentRobotState = { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t, rotation: p1.rotation + rotDiff * t }; 
+                    break; 
+                } 
+            } 
+            drawSimulationFrame(currentRobotState, elapsed); 
+            animFrameId = requestAnimationFrame(simulateFrame); 
+        }
+
+        function drawSimulationFrame(robotState, elapsed) { 
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+            if (bgImg.complete && bgImg.src) { ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.rotate(-Math.PI / 2); ctx.drawImage(bgImg, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width); ctx.restore(); } 
+            const scale = canvas.height / FIELD_WIDTH; let rLen = parseFloat(robotLengthInput.value) || 0.76; let rWid = parseFloat(robotWidthInput.value) || 0.76; let pxLen = rLen * scale; let pxWid = rWid * scale; 
+            
+            // 依然绘制出完整的背景路径细线
+            ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)'; ctx.lineWidth = 1.5; 
+            pathSegments.forEach(seg => { ctx.beginPath(); seg.forEach((pt, index) => { let pos = getCanvasCoords(pt.x, pt.y); if (index === 0) ctx.moveTo(pos.px, pos.py); else ctx.lineTo(pos.px, pos.py); }); ctx.stroke(); }); 
+            
+            // 绘制机器人的高亮方框
+            let pos = getCanvasCoords(robotState.x, robotState.y); 
+            ctx.save(); ctx.translate(pos.px, pos.py); ctx.rotate(-Math.PI / 2 - robotState.rotation * Math.PI / 180); 
+            ctx.fillStyle = 'rgba(57, 255, 20, 0.3)'; ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2; ctx.shadowBlur = 10; ctx.shadowColor = '#39ff14'; 
+            ctx.fillRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid); ctx.strokeRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid); 
+            ctx.beginPath(); ctx.moveTo(pxLen / 2, -pxWid / 4); ctx.lineTo(pxLen / 2 + 12, 0); ctx.lineTo(pxLen / 2, pxWid / 4); ctx.closePath(); 
+            ctx.fillStyle = '#39ff14'; ctx.fill(); ctx.restore(); 
+            
+            // 时间面板
+            ctx.save(); ctx.fillStyle = "rgba(10, 11, 16, 0.85)"; ctx.fillRect(10, 10, 140, 36); ctx.strokeStyle = "#00f3ff"; ctx.lineWidth = 1; ctx.strokeRect(10, 10, 140, 36); ctx.font = "bold 20px 'Orbitron', monospace"; ctx.fillStyle = "#00f3ff"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(`⏱️ ${elapsed.toFixed(2)} s`, 15, 29); ctx.restore(); 
+        }
         
         function drawPoints() {
             if(isSimulating) return; ctx.clearRect(0, 0, canvas.width, canvas.height); 
-            
-            // 🚀 画布拉伸自适应！这行代码会自动把你的自定义场地图片填充满新的比例！
             if (bgImg.complete && bgImg.src) { ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.rotate(-Math.PI / 2); ctx.drawImage(bgImg, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width); ctx.restore(); } 
-            
             const scale = canvas.height / FIELD_WIDTH; let rLen = parseFloat(robotLengthInput.value) || 0.76; let rWid = parseFloat(robotWidthInput.value) || 0.76; let pxLen = rLen * scale; let pxWid = rWid * scale; 
             
-            // 路径连线
             ctx.strokeStyle = 'rgba(0, 243, 255, 0.6)'; ctx.lineWidth = 1.5; ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0, 243, 255, 0.3)';
             pathSegments.forEach(seg => { ctx.beginPath(); seg.forEach((pt, index) => { let pos = getCanvasCoords(pt.x, pt.y); if (index === 0) ctx.moveTo(pos.px, pos.py); else ctx.lineTo(pos.px, pos.py); }); ctx.stroke(); }); ctx.shadowBlur = 0;
             
-            // 路径轨迹小点点
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; pathSegments.forEach(seg => { seg.forEach(pt => { let pos = getCanvasCoords(pt.x, pt.y); ctx.beginPath(); ctx.arc(pos.px, pos.py, 1.5, 0, Math.PI * 2); ctx.fill(); }); }); 
             
-            // 航点机器人方框渲染
             keyWaypoints.forEach((pt, index) => {
                 let pos = getCanvasCoords(pt.x, pt.y); let isHover = (index === hoveredIndex); let curRot = pt.rotation !== undefined ? pt.rotation : pt.heading;
                 ctx.save(); ctx.translate(pos.px, pos.py); ctx.rotate(-Math.PI / 2 - curRot * Math.PI / 180);
-                
-                if (isHover) { ctx.shadowBlur = 18; ctx.shadowColor = '#ffe600'; } 
-                else { ctx.shadowBlur = 8; ctx.shadowColor = '#39ff14'; }
-                
+                if (isHover) { ctx.shadowBlur = 18; ctx.shadowColor = '#ffe600'; } else { ctx.shadowBlur = 8; ctx.shadowColor = '#39ff14'; }
                 ctx.fillStyle = isHover ? 'rgba(255, 230, 0, 0.3)' : 'rgba(57, 255, 20, 0.15)'; 
                 ctx.strokeStyle = isHover ? '#ffe600' : '#39ff14'; 
-                ctx.lineWidth = 2; 
-                ctx.fillRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid); 
-                ctx.strokeRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid);
-                
-                // 车头指示三角形
+                ctx.lineWidth = 2; ctx.fillRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid); ctx.strokeRect(-pxLen / 2, -pxWid / 2, pxLen, pxWid);
                 ctx.beginPath(); ctx.moveTo(pxLen / 2, -pxWid / 4); ctx.lineTo(pxLen / 2 + 10, 0); ctx.lineTo(pxLen / 2, pxWid / 4); ctx.closePath(); 
-                ctx.fillStyle = isHover ? '#ffe600' : '#39ff14'; 
-                ctx.fill(); 
-                ctx.restore(); 
+                ctx.fillStyle = isHover ? '#ffe600' : '#39ff14'; ctx.fill(); ctx.restore(); 
 
-                // 节点中心锚点
                 if (pt.isStop) { 
-                    ctx.fillStyle = isHover ? '#ffe600' : '#ff2a2a'; 
-                    ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle;
-                    ctx.fillRect(pos.px - 4, pos.py - 4, 8, 8); 
-                    ctx.shadowBlur = 0;
-                } 
-                else { 
-                    ctx.beginPath(); ctx.arc(pos.px, pos.py, 4, 0, Math.PI * 2); 
-                    ctx.fillStyle = isHover ? '#ffe600' : '#39ff14'; 
-                    ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle;
-                    ctx.fill(); 
-                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = isHover ? '#ffe600' : '#ff2a2a'; ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle;
+                    ctx.fillRect(pos.px - 4, pos.py - 4, 8, 8); ctx.shadowBlur = 0;
+                } else { 
+                    ctx.beginPath(); ctx.arc(pos.px, pos.py, 4, 0, Math.PI * 2); ctx.fillStyle = isHover ? '#ffe600' : '#39ff14'; 
+                    ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; ctx.fill(); ctx.shadowBlur = 0;
                 } 
 
-                // 红色入弯切线指示器
                 let radHeadingIn = pt.heading * Math.PI / 180; let dirXIn = -Math.sin(radHeadingIn); let dirYIn = -Math.cos(radHeadingIn);
                 ctx.beginPath(); ctx.moveTo(pos.px, pos.py); ctx.lineTo(pos.px + dirXIn * 16, pos.py + dirYIn * 16); ctx.strokeStyle = pt.isStop ? 'rgba(255,42,42,0.8)' : '#ff2a2a'; ctx.lineWidth = 2; ctx.stroke();
 
-                // 紫色出弯切线指示器
                 if (index < keyWaypoints.length - 1 && !pt.disconnectNext) { 
                     let hOut = pt.headingOut !== undefined ? pt.headingOut : pt.heading; 
                     if (hOut !== pt.heading) {
-                        let radHeadingOut = hOut * Math.PI / 180;
-                        let dirXOut = -Math.sin(radHeadingOut); let dirYOut = -Math.cos(radHeadingOut);
+                        let radHeadingOut = hOut * Math.PI / 180; let dirXOut = -Math.sin(radHeadingOut); let dirYOut = -Math.cos(radHeadingOut);
                         ctx.beginPath(); ctx.moveTo(pos.px, pos.py); ctx.lineTo(pos.px + dirXOut * 16, pos.py + dirYOut * 16); ctx.strokeStyle = '#ff00ff'; ctx.lineWidth = 2; ctx.stroke(); 
                     }
                 }
@@ -605,11 +714,17 @@
             if (keyWaypoints.length === 0) { output.value = "// WAITING FOR DEPLOYMENT..."; return; } 
             let code = `// ==========================================\n// 🎯 PASS PLANNER | ETA: ${simTotalTime.toFixed(2)} SEC\n// ⚙️ BRAKE PID: P=${globalBrakePID.p}, I=${globalBrakePID.i}, D=${globalBrakePID.d}\n// ==========================================\n\n`; 
             pathSegments.forEach((seg, idx) => { 
-                code += `/* \nnew AutoMoveComplex(\n    m_drivetrain, \n    myPath.segments[${idx}].xArray, \n    myPath.segments[${idx}].yArray, \n    myPath.segments[${idx}].rotArray, \n    myPath.segments[${idx}].speedArray, \n    myPath.segments[${idx}].stopAtEnd, \n    false, false, \n    ${globalBrakePID.p}, ${globalBrakePID.i}, ${globalBrakePID.d}\n);\n*/\n\n`; 
+                let realIndex = seg.waypointIndex;
+                let maxA = keyWaypoints[realIndex].maxAccel !== undefined ? keyWaypoints[realIndex].maxAccel : 5.0;
+                let msStart = keyWaypoints[realIndex].mainSpeedIsStart !== undefined ? keyWaypoints[realIndex].mainSpeedIsStart : true;
+                let tOut = keyWaypoints[realIndex].tensionOut !== undefined ? keyWaypoints[realIndex].tensionOut : globalCurveWeight;
+                let tIn = keyWaypoints[realIndex].tensionIn !== undefined ? keyWaypoints[realIndex].tensionIn : globalCurveWeight;
+                
+                code += `/* \nnew AutoMoveComplex(\n    m_drivetrain, \n    myPath.segments[${idx}].xArray, \n    myPath.segments[${idx}].yArray, \n    myPath.segments[${idx}].rotArray, \n    myPath.segments[${idx}].speedArray, \n    myPath.segments[${idx}].stopAtEnd, \n    false, false, \n    ${globalBrakePID.p}, ${globalBrakePID.i}, ${globalBrakePID.d}\n    // Accel: ${maxA}, MainSpeedAtStart: ${msStart}, tOut: ${tOut}, tIn: ${tIn}\n);\n*/\n\n`; 
             }); 
             output.value = code; 
         }
-        function clearPoints() { keyWaypoints = []; pathSegments = []; hoveredIndex = -1; if(isSimulating) toggleSimulation(); drawPoints(); generateJavaCode(); saveNameInput.value = ""; }
+        function clearPoints() { keyWaypoints = []; pathSegments = []; hoveredIndex = -1; if(isSimulating) toggleSimulation(); renderRouteTimeline(); drawPoints(); generateJavaCode(); saveNameInput.value = ""; }
     </script>
 </body>
 </html>

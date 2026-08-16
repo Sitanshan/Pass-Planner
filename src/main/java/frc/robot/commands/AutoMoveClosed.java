@@ -38,8 +38,8 @@ public class AutoMoveClosed extends Command {
     private Pose2d m_targetWaypoint = new Pose2d();
 
     // 🚨 恢复你的双轴独立 PID 控制器
-    private final PIDController m_MovePIDx = new PIDController(5.5, 0.1, 0.1);
-    private final PIDController m_MovePIDy = new PIDController(5.5, 0.1, 0.1);
+    private final PIDController m_MovePIDx = new PIDController(5., 0.1, 0.1);
+    private final PIDController m_MovePIDy = new PIDController(5., 0.1, 0.1);
     
     private final SwerveRequest.FieldCentricFacingAngle driveClosed = new SwerveRequest.FieldCentricFacingAngle();
 

@@ -118,7 +118,7 @@ public class RobotContainer {
     joystick1.leftTrigger().whileTrue(
       Commands.sequence(
             new AutoMoveCircle(drivetrain, 1.9, 3, false).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 1),
-            drivetrain.passPlanner.gDPCommand(1, 3, 2).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
+            drivetrain.passPlanner.gDPCommand(1, 3, 1).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
             new AutoMoveComplex(drivetrain, null, null, null, null, false, false, false, 6, 0.1, 0.1).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
             new AutoMoveClosed(drivetrain, () -> 1, 2.8)
         ));
@@ -126,7 +126,7 @@ public class RobotContainer {
     joystick1.rightTrigger().whileTrue(
       Commands.sequence(
             new AutoMoveCircle(drivetrain, 1.9, 3, false).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 1),
-            drivetrain.passPlanner.gDPCommand(0, 3, 2).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
+            drivetrain.passPlanner.gDPCommand(0, 3, 1).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
             new AutoMoveComplex(drivetrain, null, null, null, null, false, false, false, 6, 0.1, 0.1).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
             new AutoMoveClosed(drivetrain, () -> 0, 2.8)
         ));
@@ -134,7 +134,7 @@ public class RobotContainer {
             Commands.runOnce(()->{drivetrain.passPlanner.supplyProxyId=1;}),
             new AutoMoveCircle(drivetrain, 2, 3, false).onlyIf(()->{return drivetrain.passPlanner.calcShortestReefPath(1)>1 || drivetrain.passPlanner.calcShortestReefPath(1)<-1;}),
             drivetrain.passPlanner.CreatePathToLeftSupply(),
-            new AutoMoveComplex(drivetrain, null, null, null, null, true, false, false, 6, 0.1, 0.1)
+            new AutoMoveComplex(drivetrain, null, null, null, null, true, false, false, 4, 0.1, 0.1)
         ));
     joystick1.b().whileTrue(Commands.sequence(
             Commands.runOnce(()->{drivetrain.passPlanner.supplyProxyId=5;}),
