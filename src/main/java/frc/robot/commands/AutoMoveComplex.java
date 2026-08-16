@@ -143,7 +143,9 @@ public class AutoMoveComplex extends Command {
         Pose2d currentPose = m_drivetrain.getState().Pose; 
 
         double distToAbsoluteFinal = currentPose.getTranslation().getDistance(finalWaypoint.getTranslation());
-        if (distToAbsoluteFinal <= 0.05) {
+        
+        // 🚨 修改 1：必须走到最后 3 个点（约 0.45m 内），才允许触发距离终点提前结束
+        if (distToAbsoluteFinal <= 0.05 && currentIndex >= xArray.length - 3) {
             currentIndex = xArray.length;
             return;
         }
@@ -151,7 +153,11 @@ public class AutoMoveComplex extends Command {
         double minDistance = Double.MAX_VALUE;
         int closestUpcomingIndex = currentIndex;
         
-        for (int i = currentIndex; i < xArray.length; i++) {
+        // 🚨 修改 2：极严苛的视野限制。最多只往前搜索 3 个点（约 0.45 米的路径）
+        // 强迫机器人严丝合缝地沿着轨迹点走，绝不跨步跳跃
+        int searchWindow = Math.min(xArray.length, currentIndex + 3);
+        
+        for (int i = currentIndex; i < searchWindow; i++) {
             double distToPt = currentPose.getTranslation().getDistance(new Translation2d(xArray[i], yArray[i]));
             if (distToPt < minDistance) {
                 minDistance = distToPt;
@@ -179,7 +185,7 @@ public class AutoMoveComplex extends Command {
             
             double remainingArcLength = distToNextWaypoint;
 
-            // 2. 🌟 架构师级修正：精确积分后续所有路径段的真实物理欧氏距离！
+            // 2. 精确积分后续所有路径段的真实物理欧氏距离
             for (int i = currentIndex; i < xArray.length - 1; i++) {
                 double dx = xArray[i+1] - xArray[i];
                 double dy = yArray[i+1] - yArray[i];
@@ -199,12 +205,10 @@ public class AutoMoveComplex extends Command {
         double suppX = realTargetVel * angleNow.getCos();
         double suppY = realTargetVel * angleNow.getSin();
         
-       // double targetRot = 0.0;
         Optional<DriverStation.Alliance> alliance = DriverStation.getAlliance();
         boolean isRed = alliance.isPresent() && alliance.get() == DriverStation.Alliance.Red;
         
-        if (!aimAtReef&&!aimatsupply) {
-            
+        if (!aimAtReef && !aimatsupply) {
             targetRot = m_drivetrain.autoShooting ? m_drivetrain.autoRot : dArray[currentIndex];
         }
 
@@ -229,7 +233,9 @@ public class AutoMoveComplex extends Command {
 
         Pose2d currentPose = m_drivetrain.getState().Pose;
         double distToFinal = currentPose.getTranslation().getDistance(finalWaypoint.getTranslation());
-        return currentIndex >= xArray.length || distToFinal <= 0.05;
+        
+        // 🚨 修改 1 同步：结束条件必须加上最后 3 个索引的验证
+        return currentIndex >= xArray.length || (distToFinal <= 0.05 && currentIndex >= xArray.length - 3);
     }
 
     @Override

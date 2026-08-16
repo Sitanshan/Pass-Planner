@@ -116,20 +116,43 @@ public class RobotContainer {
             drivetrain.passPlanner.changeReefID(-1)
         );
     joystick1.leftTrigger().whileTrue(
-      Commands.sequence(
+      Commands.either(
+        Commands.sequence(
             new AutoMoveCircle(drivetrain, 1.9, 3, false).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 1),
-            drivetrain.passPlanner.gDPCommand(1, 3, 1).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
+            drivetrain.passPlanner.gDPCommand(1, 3, 0.7).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
             new AutoMoveComplex(drivetrain, null, null, null, null, false, false, false, 6, 0.1, 0.1).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
             new AutoMoveClosed(drivetrain, () -> 1, 2.8)
-        ));
+        ),
+        Commands.sequence(
+            Commands.runOnce(()->{
+              Pose2d endPose=new Pose2d(ReefTargetMap.BLUE_ALGAE_PREP_X[drivetrain.passPlanner.targetReefID], ReefTargetMap.BLUE_ALGAE_PREP_Y[drivetrain.passPlanner.targetReefID],Rotation2d.fromDegrees(drivetrain.passPlanner.getFaceCenterAngle(drivetrain.passPlanner.targetReefID)-180));
+              drivetrain.passPlanner.generateUniversalBezier(null, endPose, drivetrain.passPlanner.getFaceCenterAngle(drivetrain.passPlanner.targetReefID)-180, 3.2, 0.7, 5, true, 0.6, 0.6, true, true);
+            }),
+            new AutoMoveComplex(drivetrain, null, null, null, null, false, false, false, 6, 0.1, 0.1),
+            new AutoMoveClosed(drivetrain, () -> 1, 2.8)
+          ),
+        ()->{return drivetrain.passPlanner.calcShortestReefPath()!=0;}
+      
+      ));
 
     joystick1.rightTrigger().whileTrue(
+      Commands.either(
       Commands.sequence(
             new AutoMoveCircle(drivetrain, 1.9, 3, false).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 1),
-            drivetrain.passPlanner.gDPCommand(0, 3, 1).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
+            drivetrain.passPlanner.gDPCommand(0, 3, 0.7).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
             new AutoMoveComplex(drivetrain, null, null, null, null, false, false, false, 6, 0.1, 0.1).onlyIf(() -> Math.abs(drivetrain.passPlanner.calcShortestReefPath()) > 0),
             new AutoMoveClosed(drivetrain, () -> 0, 2.8)
-        ));
+        ),
+      Commands.sequence(
+            Commands.runOnce(()->{
+              Pose2d endPose=new Pose2d(ReefTargetMap.BLUE_ALGAE_PREP_X[drivetrain.passPlanner.targetReefID], ReefTargetMap.BLUE_ALGAE_PREP_Y[drivetrain.passPlanner.targetReefID],Rotation2d.fromDegrees(drivetrain.passPlanner.getFaceCenterAngle(drivetrain.passPlanner.targetReefID)-180));
+              drivetrain.passPlanner.generateUniversalBezier(null, endPose, drivetrain.passPlanner.getFaceCenterAngle(drivetrain.passPlanner.targetReefID)-180, 2.8, 0.7, 5, true, 0.6, 0.6, true, true);
+            }),
+            new AutoMoveComplex(drivetrain, null, null, null, null, false, false, false, 6, 0.1, 0.1),
+            new AutoMoveClosed(drivetrain, () -> 0, 2.8)
+          ),
+        ()->{return drivetrain.passPlanner.calcShortestReefPath()!=0;}));
+
     joystick1.x().whileTrue(Commands.sequence(
             Commands.runOnce(()->{drivetrain.passPlanner.supplyProxyId=1;}),
             new AutoMoveCircle(drivetrain, 2, 3, false).onlyIf(()->{return drivetrain.passPlanner.calcShortestReefPath(1)>1 || drivetrain.passPlanner.calcShortestReefPath(1)<-1;}),

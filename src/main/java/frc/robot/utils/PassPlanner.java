@@ -316,7 +316,7 @@ public class PassPlanner {
         double realStartSpeed = startSpeed;
         Optional<DriverStation.Alliance> alliance = DriverStation.getAlliance();
         boolean isRed = alliance.isPresent() && alliance.get() == DriverStation.Alliance.Red;
-
+        
         if (startPose != null) {
             startX = startPose.getX();
             startY = startPose.getY();
@@ -339,8 +339,8 @@ public class PassPlanner {
 
             // 空间向量映射：将红方物理状态投影回蓝方
             if (isRed) {
-                if (invertXOnRed) startX = 17.55 - startX;
-                if (invertYOnRed) startY = 8.05 - startY;
+                if (invertXOnRed) startX = OperatorConstants.fieldHeight - startX;
+                if (invertYOnRed) startY = OperatorConstants.fieldWidth - startY;
                 
                 if (invertXOnRed && invertYOnRed) {
                     currentMovingAngle -= 180.0;
