@@ -476,8 +476,142 @@ public class PassPlanner {
             }
         }
     }
+    /**
+     * 🏎️ 【核心】梯形/三角形速度规划引擎 (Trapezoidal Velocity Profiling)
+     */
+    private void generateBezierSegmentWithCruise(double startX, double startY, double headingOut, 
+                                                 double endX, double endY, double headingIn,
+                                                 double startSpeed, double cruiseSpeed, double endSpeed, 
+                                                 double maxAccel, 
+                                                 double tensionOut, double tensionIn,
+                                                 ArrayList<Double> xList, ArrayList<Double> yList, ArrayList<Double> speedList) {
+        
+        // 1. 调用现有的双张力几何生成器，先算出所有的 X 和 Y 坐标路径点
+        generateBezierSegment(startX, startY, headingOut, endX, endY, headingIn, tensionOut, tensionIn, xList, yList);
+        
+        // 2. 运动学速度规划 (Trapezoidal Kinematic Profiling)
+        int size = xList.size();
+        speedList.clear();
+        for (int i = 0; i < size; i++) speedList.add(0.0); // 初始化占位
 
-    
+        if (size == 0) return;
+        if (size == 1) {
+            speedList.set(0, Math.min(startSpeed, endSpeed));
+            return;
+        }
+
+        maxAccel = Math.max(0.1, Math.abs(maxAccel)); // 防呆，保证正数加速度
+
+        // Pass 1: 正向推演 (从起点开始，加速能达到的天花板)
+        double[] forwardProfile = new double[size];
+        forwardProfile[0] = startSpeed;
+        for (int j = 1; j < size; j++) {
+            double ds = Math.hypot(xList.get(j) - xList.get(j-1), yList.get(j) - yList.get(j-1));
+            forwardProfile[j] = Math.sqrt(forwardProfile[j-1] * forwardProfile[j-1] + 2 * maxAccel * ds);
+        }
+
+        // Pass 2: 反向推演 (从终点倒推，为了能停下/达到末端速度，必须刹车的天花板)
+        double[] backwardProfile = new double[size];
+        backwardProfile[size-1] = endSpeed;
+        for (int j = size - 2; j >= 0; j--) {
+            double ds = Math.hypot(xList.get(j+1) - xList.get(j), yList.get(j+1) - yList.get(j));
+            backwardProfile[j] = Math.sqrt(backwardProfile[j+1] * backwardProfile[j+1] + 2 * maxAccel * ds);
+        }
+
+        // Pass 3: 融合裁决 (取 巡航限制、正向天花板、反向天花板 中的最小值)
+        for (int j = 0; j < size; j++) {
+            double finalV = Math.min(cruiseSpeed, Math.min(forwardProfile[j], backwardProfile[j]));
+            speedList.set(j, finalV);
+        }
+    }
+    /**
+     * 🏎️ 【通用对外接口】支持梯形速度规划的全局贝塞尔生成器
+     */
+    public void generateUniversalBezierWithCruise(Pose2d startPose, Pose2d endPose, 
+                                                  double targetDirectionDeg, 
+                                                  double startSpeed, double cruiseSpeed, double endSpeed,
+                                                  double maxAccel, 
+                                                  double tensionOut, double tensionIn,
+                                                  boolean invertXOnRed, boolean invertYOnRed) {
+        if (m_drivetrain == null) return;
+        
+        double startX, startY, headingOut;
+        double realStartSpeed = startSpeed;
+        Optional<DriverStation.Alliance> alliance = DriverStation.getAlliance();
+        boolean isRed = alliance.isPresent() && alliance.get() == DriverStation.Alliance.Red;
+
+        if (startPose != null) {
+            startX = startPose.getX();
+            startY = startPose.getY();
+            headingOut = startPose.getRotation().getDegrees();
+        } else {
+            Pose2d currentPose = m_drivetrain.getState().Pose;
+            startX = currentPose.getX();
+            startY = currentPose.getY();
+
+            // 获取绝对 Field-Centric 速度方向
+            double robotVx = m_drivetrain.getState().Speeds.vxMetersPerSecond;
+            double robotVy = m_drivetrain.getState().Speeds.vyMetersPerSecond;
+            Rotation2d currentRot = currentPose.getRotation();
+
+            double fieldVx = robotVx * currentRot.getCos() - robotVy * currentRot.getSin();
+            double fieldVy = robotVx * currentRot.getSin() + robotVy * currentRot.getCos();
+
+            double currentActualSpeed = Math.hypot(fieldVx, fieldVy);
+            double currentMovingAngle = Math.toDegrees(Math.atan2(fieldVy, fieldVx));
+
+            // 空间向量映射：将红方物理状态投影回蓝方
+            if (isRed) {
+                if (invertXOnRed) startX = 17.55 - startX;
+                if (invertYOnRed) startY = 8.05 - startY;
+                
+                if (invertXOnRed && invertYOnRed) {
+                    currentMovingAngle -= 180.0;
+                } else if (invertXOnRed && !invertYOnRed) {
+                    currentMovingAngle = 180.0 - currentMovingAngle;
+                } else if (!invertXOnRed && invertYOnRed) {
+                    currentMovingAngle = -currentMovingAngle;
+                }
+                
+                while (currentMovingAngle > 180.0) currentMovingAngle -= 360.0;
+                while (currentMovingAngle < -180.0) currentMovingAngle += 360.0;
+            }
+
+            // 动量保留
+            if (currentActualSpeed > 1.0) {
+                headingOut = currentMovingAngle;
+                realStartSpeed = Math.max(startSpeed, currentActualSpeed);
+            } else {
+                headingOut = Math.toDegrees(Math.atan2(endPose.getY() - startY, endPose.getX() - startX));
+            }
+        }
+
+        double endX = endPose.getX();
+        double endY = endPose.getY();
+        double headingIn = targetDirectionDeg; 
+
+        ArrayList<Double> xList = new ArrayList<>();
+        ArrayList<Double> yList = new ArrayList<>();
+        ArrayList<Double> speedList = new ArrayList<>();
+        
+        // 🚀 核心：调用带 Cruise 的全新速度引擎
+        generateBezierSegmentWithCruise(startX, startY, headingOut, endX, endY, headingIn, 
+                                        realStartSpeed, cruiseSpeed, endSpeed, maxAccel, 
+                                        tensionOut, tensionIn, 
+                                        xList, yList, speedList);
+
+        // 存入底层数组缓存
+        int totalPoints = xList.size();
+        this.dynamicXArray = new double[totalPoints];
+        this.dynamicYArray = new double[totalPoints];
+        this.dynamicSpeedArray = new double[totalPoints];
+
+        for (int i = 0; i < totalPoints; i++) {
+            this.dynamicXArray[i] = xList.get(i);
+            this.dynamicYArray[i] = yList.get(i);
+            this.dynamicSpeedArray[i] = speedList.get(i);
+        }
+    }
     /**
      * 动态生成前往目标 Reef 的打分路线 (45° 侧切接管 + 8.0 m/s² 物理极速晚刹车)
      */

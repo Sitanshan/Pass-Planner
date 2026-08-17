@@ -1,7 +1,7 @@
 {
   "name": "reefPath",
   "brakePID": {
-    "p": 6,
+    "p": 5,
     "i": 0.1,
     "d": 0.1
   },
@@ -35,13 +35,14 @@
       "heading": 127,
       "headingOut": -53,
       "rotation": -53,
-      "speed": 3.2,
+      "speed": 2,
       "isStop": false,
       "disconnectNext": false,
-      "maxAccel": 7,
+      "maxAccel": 9,
       "mainSpeedIsStart": true,
       "customTension": true,
-      "tensionIn": 0.4
+      "tensionIn": 0.4,
+      "cruiseSpeed": 3.2
     },
     {
       "x": 3.61,
@@ -66,7 +67,8 @@
       "mainSpeedIsStart": true,
       "tensionOut": 0.22,
       "tensionIn": 0.22,
-      "customTension": false
+      "customTension": false,
+      "cruiseSpeed": 3.2
     },
     {
       "x": 1.69,
@@ -89,13 +91,14 @@
       "heading": 127,
       "headingOut": -53,
       "rotation": -53,
-      "speed": 3.2,
+      "speed": 2,
       "isStop": false,
       "disconnectNext": false,
       "mainSpeedIsStart": true,
-      "maxAccel": 7,
+      "maxAccel": 9,
       "customTension": true,
-      "tensionIn": 0.4
+      "tensionIn": 0.4,
+      "cruiseSpeed": 3.2
     },
     {
       "x": 3.3,
@@ -121,7 +124,8 @@
       "mainSpeedIsStart": true,
       "tensionOut": 0.22,
       "tensionIn": 0.22,
-      "customTension": false
+      "customTension": false,
+      "cruiseSpeed": 3.2
     },
     {
       "x": 1.69,
@@ -232,34 +236,34 @@
         2,
         2.59,
         3.13,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        3.4,
-        2.7,
-        1.8,
-        0.9,
+        3.56,
+        3.95,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        3.75,
+        3,
+        2.25,
+        1.5,
+        0.75,
         0
       ],
       "stopAtEnd": true,
       "maxAccel": 9,
-      "mainSpeedIsStart": false
+      "cruiseSpeed": 4
     },
     {
       "xArray": [
@@ -320,6 +324,9 @@
         -60
       ],
       "speedArray": [
+        2,
+        2.61,
+        3.1,
         3.2,
         3.2,
         3.2,
@@ -330,17 +337,14 @@
         3.2,
         3.2,
         3.2,
-        3.2,
-        3.2,
-        2.93,
-        2.5,
-        1.96,
-        1.2,
+        2.78,
+        2.16,
+        1.25,
         1
       ],
       "stopAtEnd": false,
-      "maxAccel": 7,
-      "mainSpeedIsStart": true
+      "maxAccel": 9,
+      "cruiseSpeed": 3.2
     },
     {
       "xArray": [
@@ -409,15 +413,15 @@
         3.2,
         3.2,
         3.2,
-        3.2,
-        2.7,
-        1.8,
-        0.9,
+        3,
+        2.25,
+        1.5,
+        0.75,
         0
       ],
       "stopAtEnd": true,
       "maxAccel": 5,
-      "mainSpeedIsStart": true
+      "cruiseSpeed": 3.2
     },
     {
       "xArray": [
@@ -475,6 +479,9 @@
         -60
       ],
       "speedArray": [
+        2,
+        2.66,
+        3.18,
         3.2,
         3.2,
         3.2,
@@ -484,17 +491,14 @@
         3.2,
         3.2,
         3.2,
-        3.2,
-        3.2,
-        3.04,
-        2.62,
-        2.13,
-        1.46,
+        2.92,
+        2.36,
+        1.57,
         1
       ],
       "stopAtEnd": false,
-      "maxAccel": 7,
-      "mainSpeedIsStart": true
+      "maxAccel": 9,
+      "cruiseSpeed": 3.2
     },
     {
       "xArray": [
@@ -563,15 +567,15 @@
         3.2,
         3.2,
         3.2,
-        3.2,
-        2.7,
-        1.8,
-        0.9,
+        3,
+        2.25,
+        1.5,
+        0.75,
         0
       ],
       "stopAtEnd": true,
       "maxAccel": 5,
-      "mainSpeedIsStart": true
+      "cruiseSpeed": 3.2
     }
   ]
 }

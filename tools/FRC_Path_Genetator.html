@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>FRC Pass Planner v19.7 (Segment Simulation)</title>
+    <title>FRC Pass Planner v19.8 (Trapezoidal Profiling)</title>
     <style>
         /* ==========================================
            🌌 赛博朋克 霓虹科技感主题 (Cyberpunk Neon Theme)
@@ -244,8 +244,8 @@
 
         <div class="controls-card" id="timelineCard" style="display: none; padding: 15px;">
             <div style="color: var(--neon-yellow); font-family: 'Orbitron'; font-weight: bold; margin-bottom: 10px; font-size: 15px;">
-                📜 ROUTE TIMELINE
-                <span style="font-size: 11px; color:#aaa; font-weight: normal; margin-left:10px;">Click canvas to add nodes.</span>
+                📜 ROUTE TIMELINE (TRAPEZOIDAL PROFILE)
+                <span style="font-size: 11px; color:#aaa; font-weight: normal; margin-left:10px;">Nodes set Start/End Speed. Segments set Cruise Speed.</span>
             </div>
             <div id="timelineContainer">
                 <!-- 动态生成的 Node 与 Path 交织列表 -->
@@ -280,9 +280,8 @@
         let keyWaypoints = []; let pathSegments = []; let hoveredIndex = -1; let isDragging = false; let draggedIndex = -1; let dragStartX = 0; let dragStartY = 0; let hasDragged = false; 
         let globalBrakePID = { p: 4.5, i: 0.1, d: 0.1 }; let globalCurveWeight = 0.4; 
         
-        // 🚀 模拟器全局变量更新，支持单独片段状态管理
         let isSimulating = false; let simPoints = []; let simTotalTime = 0; let simStartTime = 0; let animFrameId = null;
-        let activeSimPoints = []; let activeSimTotalTime = 0; // 单独或全局模拟正在使用的数据
+        let activeSimPoints = []; let activeSimTotalTime = 0; 
         
         let targetDirectoryHandle = null; const bgImg = new Image();
 
@@ -331,7 +330,15 @@
                 name: name, brakePID: globalBrakePID, curveWeight: globalCurveWeight, waypoints: keyWaypoints, 
                 segments: pathSegments.map((seg, idx) => { 
                     let realIndex = seg.waypointIndex; let p0 = keyWaypoints[realIndex];
-                    return { xArray: seg.map(pt => pt.x), yArray: seg.map(pt => pt.y), rotArray: seg.map(pt => pt.rotation), speedArray: seg.map(pt => pt.speed), stopAtEnd: seg.stopAtEnd, maxAccel: p0.maxAccel !== undefined ? p0.maxAccel : 5.0, mainSpeedIsStart: p0.mainSpeedIsStart !== undefined ? p0.mainSpeedIsStart : true }; 
+                    return { 
+                        xArray: seg.map(pt => pt.x), 
+                        yArray: seg.map(pt => pt.y), 
+                        rotArray: seg.map(pt => pt.rotation), 
+                        speedArray: seg.map(pt => pt.speed), 
+                        stopAtEnd: seg.stopAtEnd, 
+                        maxAccel: p0.maxAccel !== undefined ? p0.maxAccel : 5.0, 
+                        cruiseSpeed: p0.cruiseSpeed !== undefined ? p0.cruiseSpeed : 4.0 
+                    }; 
                 }) 
             };
             await writeToFile(fileName, JSON.stringify(robotData, null, 2));
@@ -380,9 +387,9 @@
         function addPoint(x, y) {
             let prevHeading = keyWaypoints.length > 0 ? keyWaypoints[keyWaypoints.length-1].heading : 0;
             let newPt = { 
-                x: x, y: y, heading: prevHeading, headingOut: prevHeading, rotation: prevHeading, speed: 3.0, 
+                x: x, y: y, heading: prevHeading, headingOut: prevHeading, rotation: prevHeading, speed: 0.0, 
                 isStop: keyWaypoints.length === 0, disconnectNext: false, 
-                maxAccel: 5.0, mainSpeedIsStart: true, tensionOut: globalCurveWeight, tensionIn: globalCurveWeight, customTension: false 
+                maxAccel: 5.0, cruiseSpeed: 4.0, tensionOut: globalCurveWeight, tensionIn: globalCurveWeight, customTension: false 
             }; 
             keyWaypoints.push(newPt); renderRouteTimeline(); recalculatePath(); 
             let container = document.getElementById('timelineContainer'); setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
@@ -430,7 +437,9 @@
                     </div>
                     <div class="timeline-controls" style="align-items: center;">
                         <div class="form-group"><label style="color:var(--neon-yellow)">Chassis Rot</label><input type="number" step="0.1" value="${pt.rotation !== undefined ? pt.rotation : pt.heading}" onchange="updateNodeData(${i}, 'rotation', this.value)" style="border-color:var(--neon-yellow); color:var(--neon-yellow);"></div>
-                        <div class="form-group"><label>Speed (m/s)</label><input type="number" step="0.1" value="${pt.speed}" onchange="updateNodeData(${i}, 'speed', this.value)"></div>
+                        
+                        <!-- 🚀 这里的 Speed 现在真正代表途径这个 Node 瞬间的目标速度 (Start/End Speed) -->
+                        <div class="form-group"><label>Node Spd (m/s)</label><input type="number" step="0.1" value="${pt.speed}" onchange="updateNodeData(${i}, 'speed', this.value)"></div>
                         
                         <label class="inline-checkbox" style="border-color: rgba(255, 42, 42, 0.4); margin-top:14px;">
                             <input type="checkbox" ${isStopChecked} onchange="updateNodeData(${i}, 'isStop', this.checked)"> 
@@ -449,7 +458,7 @@
                     segDiv.className = 'segment-item';
                     
                     let maxA = pt.maxAccel !== undefined ? pt.maxAccel : 5.0;
-                    let msStart = pt.mainSpeedIsStart !== undefined ? pt.mainSpeedIsStart : true;
+                    let cruise = pt.cruiseSpeed !== undefined ? pt.cruiseSpeed : 4.0;
                     let tOut = pt.tensionOut !== undefined ? pt.tensionOut : globalCurveWeight;
                     let tIn = pt.tensionIn !== undefined ? pt.tensionIn : globalCurveWeight;
 
@@ -460,12 +469,8 @@
                         </div>
                         <div class="timeline-controls">
                             <div class="form-group"><label>Accel (m/s²)</label><input type="number" step="0.1" value="${maxA}" onchange="updateNodeData(${i}, 'maxAccel', this.value)"></div>
-                            <div class="form-group"><label>Main Speed Loc</label>
-                                <select onchange="updateNodeData(${i}, 'mainSpeedIsStart', this.value)">
-                                    <option value="true" ${msStart ? 'selected' : ''}>Start (Brake)</option>
-                                    <option value="false" ${!msStart ? 'selected' : ''}>End (Thrust)</option>
-                                </select>
-                            </div>
+                            <!-- 🚀 新增：段内巡航限速 Cruise Speed -->
+                            <div class="form-group"><label>Cruise Spd</label><input type="number" step="0.1" value="${cruise}" onchange="updateNodeData(${i}, 'cruiseSpeed', this.value)"></div>
                             <div class="form-group"><label>Tension OUT</label><input type="number" step="0.01" value="${tOut}" onchange="updateNodeData(${i}, 'tensionOut', this.value)"></div>
                             <div class="form-group"><label>Tension IN</label><input type="number" step="0.01" value="${tIn}" onchange="updateNodeData(${i}, 'tensionIn', this.value)"></div>
                         </div>
@@ -479,8 +484,6 @@
             let pt = keyWaypoints[index];
             if (key === 'isStop' || key === 'disconnectNext') {
                 pt[key] = value; if(key === 'disconnectNext') renderRouteTimeline(); 
-            } else if (key === 'mainSpeedIsStart') {
-                pt[key] = (value === 'true');
             } else {
                 let parsed = parseFloat(value);
                 if (!isNaN(parsed)) {
@@ -494,6 +497,9 @@
             recalculatePath(); 
         }
 
+        // ==========================================
+        // 🚀 核心重写：引入 3-Pass 梯形速度规划引擎
+        // ==========================================
         function recalculatePath() {
             pathSegments = []; simPoints = []; simTotalTime = 0; if (keyWaypoints.length === 0) { drawPoints(); generateJavaCode(); return; }
             let accTime = 0; let lastSimPt = null; 
@@ -531,43 +537,56 @@
                 }
 
                 let size = tempSegmentPts.length;
-                let maxAccel = Math.abs(p0.maxAccel !== undefined ? p0.maxAccel : 5.0);
-                let mainSpeedIsStart = p0.mainSpeedIsStart !== undefined ? p0.mainSpeedIsStart : true;
-                let startSpeed = p0.speed; let endSpeed = p1.speed;
+                let maxAccel = Math.max(0.1, Math.abs(p0.maxAccel !== undefined ? p0.maxAccel : 5.0));
+                let cruiseSpeed = p0.cruiseSpeed !== undefined ? p0.cruiseSpeed : 4.0;
+                let startSpeed = p0.speed; 
+                let endSpeed = p1.speed;
 
-                for (let j = 0; j < size; j++) tempSegmentPts[j].speed = 0.0;
-
-                if (size === 1) { tempSegmentPts[0].speed = mainSpeedIsStart ? startSpeed : endSpeed; } 
-                else if (size > 1) {
-                    if (mainSpeedIsStart) {
-                        tempSegmentPts[size - 1].speed = endSpeed; let isDeceleratingAtEnd = startSpeed > endSpeed;
-                        for (let j = size - 2; j >= 0; j--) {
-                            let ds = Math.hypot(tempSegmentPts[j+1].x - tempSegmentPts[j].x, tempSegmentPts[j+1].y - tempSegmentPts[j].y);
-                            let nextV = tempSegmentPts[j+1].speed;
-                            if (isDeceleratingAtEnd) { let reqV = Math.sqrt(nextV * nextV + 2 * maxAccel * ds); tempSegmentPts[j].speed = Math.min(startSpeed, reqV); } 
-                            else { let reqV = Math.sqrt(Math.max(0, nextV * nextV - 2 * maxAccel * ds)); tempSegmentPts[j].speed = Math.max(startSpeed, reqV); }
-                        }
-                    } else {
-                        tempSegmentPts[0].speed = startSpeed; let isAcceleratingAtStart = startSpeed < endSpeed;
-                        for (let j = 1; j < size; j++) {
-                            let ds = Math.hypot(tempSegmentPts[j].x - tempSegmentPts[j-1].x, tempSegmentPts[j].y - tempSegmentPts[j-1].y);
-                            let prevV = tempSegmentPts[j-1].speed;
-                            if (isAcceleratingAtStart) { let reqV = Math.sqrt(prevV * prevV + 2 * maxAccel * ds); tempSegmentPts[j].speed = Math.min(endSpeed, reqV); } 
-                            else { let reqV = Math.sqrt(Math.max(0, prevV * prevV - 2 * maxAccel * ds)); tempSegmentPts[j].speed = Math.max(endSpeed, reqV); }
-                        }
-                    }
+                // Pass 1: 正向推演 (加速天花板)
+                let forwardProfile = new Array(size);
+                forwardProfile[0] = startSpeed;
+                for (let j = 1; j < size; j++) {
+                    let ds = Math.hypot(tempSegmentPts[j].x - tempSegmentPts[j-1].x, tempSegmentPts[j].y - tempSegmentPts[j-1].y);
+                    forwardProfile[j] = Math.sqrt(forwardProfile[j-1]**2 + 2 * maxAccel * ds);
                 }
 
+                // Pass 2: 反向推演 (刹车天花板)
+                let backwardProfile = new Array(size);
+                backwardProfile[size-1] = endSpeed;
+                for (let j = size - 2; j >= 0; j--) {
+                    let ds = Math.hypot(tempSegmentPts[j+1].x - tempSegmentPts[j].x, tempSegmentPts[j+1].y - tempSegmentPts[j].y);
+                    backwardProfile[j] = Math.sqrt(backwardProfile[j+1]**2 + 2 * maxAccel * ds);
+                }
+
+                // Pass 3: 融合裁决 (梯形 / 三角形速度配置)
                 for (let j = 0; j < size; j++) {
-                    let pt = tempSegmentPts[j]; let cruiseSpeed = pt.speed;
+                    tempSegmentPts[j].speed = Math.min(cruiseSpeed, forwardProfile[j], backwardProfile[j]);
+                }
+
+                // 🛑 PID 刹车接管结算与时间仿真
+                for (let j = 0; j < size; j++) {
+                    let pt = tempSegmentPts[j]; 
+                    let calculatedTrapezoidalSpeed = pt.speed;
+                    
                     if (p1.isStop) {
-                        let remainingIntervals = (size - 1) - j; let remainingArcLength = remainingIntervals * 0.15; let pidSpeed = globalBrakePID.p * remainingArcLength;
-                        pt.speed = Math.min(cruiseSpeed, pidSpeed); if (remainingArcLength > 0.03 && pt.speed < 0.1) pt.speed = 0.1;
-                    } else { pt.speed = cruiseSpeed; }
+                        let remainingIntervals = (size - 1) - j; 
+                        let remainingArcLength = remainingIntervals * 0.15; 
+                        let pidSpeed = globalBrakePID.p * remainingArcLength;
+                        pt.speed = Math.min(calculatedTrapezoidalSpeed, pidSpeed); 
+                        if (remainingArcLength > 0.03 && pt.speed < 0.1) pt.speed = 0.1;
+                    } else { 
+                        pt.speed = calculatedTrapezoidalSpeed; 
+                    }
                     pt.speed = parseFloat(pt.speed.toFixed(2));
                     
-                    if (lastSimPt == null) { simPoints.push({...pt, time: accTime}); } 
-                    else { let realDist = Math.hypot(pt.x - lastSimPt.x, pt.y - lastSimPt.y); let avgSpeed = Math.max(0.1, (lastSimPt.speed + pt.speed) / 2); accTime += (realDist / avgSpeed); simPoints.push({...pt, time: accTime}); }
+                    if (lastSimPt == null) { 
+                        simPoints.push({...pt, time: accTime}); 
+                    } else { 
+                        let realDist = Math.hypot(pt.x - lastSimPt.x, pt.y - lastSimPt.y); 
+                        let avgSpeed = Math.max(0.1, (lastSimPt.speed + pt.speed) / 2); 
+                        accTime += (realDist / avgSpeed); 
+                        simPoints.push({...pt, time: accTime}); 
+                    }
                     lastSimPt = pt;
                 }
                 
@@ -578,9 +597,6 @@
             simTotalTime = accTime; if(!isSimulating) drawPoints(); generateJavaCode();
         }
 
-        // ==========================================
-        // 🚀 核心更新：分离的仿真控制逻辑
-        // ==========================================
         function startSimLoop() {
             if(activeSimPoints.length === 0) return;
             isSimulating = true; simStartTime = 0; 
@@ -597,7 +613,6 @@
             } 
         }
 
-        // 👉 单段独立仿真注入
         function simulateSingleSegment(waypointIdx) {
             if (isSimulating) { isSimulating = false; cancelAnimationFrame(animFrameId); drawPoints(); }
             
@@ -607,7 +622,6 @@
             activeSimPoints = [];
             let accTime = 0; let lastPt = null;
             
-            // 为这单一的段重新从 0 开始计算虚拟时间戳
             for(let j=0; j < targetSeg.length; j++) {
                 let pt = targetSeg[j];
                 if(lastPt == null) {
@@ -653,11 +667,9 @@
             if (bgImg.complete && bgImg.src) { ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.rotate(-Math.PI / 2); ctx.drawImage(bgImg, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width); ctx.restore(); } 
             const scale = canvas.height / FIELD_WIDTH; let rLen = parseFloat(robotLengthInput.value) || 0.76; let rWid = parseFloat(robotWidthInput.value) || 0.76; let pxLen = rLen * scale; let pxWid = rWid * scale; 
             
-            // 依然绘制出完整的背景路径细线
             ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)'; ctx.lineWidth = 1.5; 
             pathSegments.forEach(seg => { ctx.beginPath(); seg.forEach((pt, index) => { let pos = getCanvasCoords(pt.x, pt.y); if (index === 0) ctx.moveTo(pos.px, pos.py); else ctx.lineTo(pos.px, pos.py); }); ctx.stroke(); }); 
             
-            // 绘制机器人的高亮方框
             let pos = getCanvasCoords(robotState.x, robotState.y); 
             ctx.save(); ctx.translate(pos.px, pos.py); ctx.rotate(-Math.PI / 2 - robotState.rotation * Math.PI / 180); 
             ctx.fillStyle = 'rgba(57, 255, 20, 0.3)'; ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2; ctx.shadowBlur = 10; ctx.shadowColor = '#39ff14'; 
@@ -665,7 +677,6 @@
             ctx.beginPath(); ctx.moveTo(pxLen / 2, -pxWid / 4); ctx.lineTo(pxLen / 2 + 12, 0); ctx.lineTo(pxLen / 2, pxWid / 4); ctx.closePath(); 
             ctx.fillStyle = '#39ff14'; ctx.fill(); ctx.restore(); 
             
-            // 时间面板
             ctx.save(); ctx.fillStyle = "rgba(10, 11, 16, 0.85)"; ctx.fillRect(10, 10, 140, 36); ctx.strokeStyle = "#00f3ff"; ctx.lineWidth = 1; ctx.strokeRect(10, 10, 140, 36); ctx.font = "bold 20px 'Orbitron', monospace"; ctx.fillStyle = "#00f3ff"; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(`⏱️ ${elapsed.toFixed(2)} s`, 15, 29); ctx.restore(); 
         }
         
@@ -716,11 +727,11 @@
             pathSegments.forEach((seg, idx) => { 
                 let realIndex = seg.waypointIndex;
                 let maxA = keyWaypoints[realIndex].maxAccel !== undefined ? keyWaypoints[realIndex].maxAccel : 5.0;
-                let msStart = keyWaypoints[realIndex].mainSpeedIsStart !== undefined ? keyWaypoints[realIndex].mainSpeedIsStart : true;
+                let cruise = keyWaypoints[realIndex].cruiseSpeed !== undefined ? keyWaypoints[realIndex].cruiseSpeed : 4.0;
                 let tOut = keyWaypoints[realIndex].tensionOut !== undefined ? keyWaypoints[realIndex].tensionOut : globalCurveWeight;
                 let tIn = keyWaypoints[realIndex].tensionIn !== undefined ? keyWaypoints[realIndex].tensionIn : globalCurveWeight;
                 
-                code += `/* \nnew AutoMoveComplex(\n    m_drivetrain, \n    myPath.segments[${idx}].xArray, \n    myPath.segments[${idx}].yArray, \n    myPath.segments[${idx}].rotArray, \n    myPath.segments[${idx}].speedArray, \n    myPath.segments[${idx}].stopAtEnd, \n    false, false, \n    ${globalBrakePID.p}, ${globalBrakePID.i}, ${globalBrakePID.d}\n    // Accel: ${maxA}, MainSpeedAtStart: ${msStart}, tOut: ${tOut}, tIn: ${tIn}\n);\n*/\n\n`; 
+                code += `/* \nnew AutoMoveComplex(\n    m_drivetrain, \n    myPath.segments[${idx}].xArray, \n    myPath.segments[${idx}].yArray, \n    myPath.segments[${idx}].rotArray, \n    myPath.segments[${idx}].speedArray, \n    myPath.segments[${idx}].stopAtEnd, \n    false, false, \n    ${globalBrakePID.p}, ${globalBrakePID.i}, ${globalBrakePID.d}\n    // Accel: ${maxA}, CruiseSpd: ${cruise}, tOut: ${tOut}, tIn: ${tIn}\n);\n*/\n\n`; 
             }); 
             output.value = code; 
         }
