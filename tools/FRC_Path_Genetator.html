@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>FRC Pass Planner v19.8 (Trapezoidal Profiling)</title>
+    <title>FRC Pass Planner v19.9 (Spd IN/OUT Split)</title>
     <style>
         /* ==========================================
            🌌 赛博朋克 霓虹科技感主题 (Cyberpunk Neon Theme)
@@ -171,11 +171,16 @@
         .inline-checkbox input { width: 14px; height: 14px; cursor: pointer;}
         
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(6px); display: none; justify-content: center; align-items: center; z-index: 999; }
-        .modal-card { background-color: var(--panel-bg); border: 1px solid var(--neon-cyan); border-radius: 8px; width: 320px; padding: 25px; box-shadow: 0 0 30px rgba(0, 243, 255, 0.2); }
+        .modal-card { background-color: var(--panel-bg); border: 1px solid var(--neon-cyan); border-radius: 8px; width: 340px; padding: 25px; box-shadow: 0 0 30px rgba(0, 243, 255, 0.2); }
         .form-row { display: flex; gap: 10px; margin-bottom: 12px;}
         .form-group { flex: 1; display: flex; flex-direction: column; gap: 4px; }
         .form-group label { font-size: 12px; color: #a0a0a0; font-weight: 600;}
         .form-group input { padding: 6px; }
+
+        .highlight-green label { color: var(--neon-green) !important; text-shadow: 0 0 5px rgba(57,255,20,0.4);}
+        .highlight-green input { border-color: var(--neon-green) !important; color: var(--neon-green) !important;}
+        .highlight-purple label { color: var(--neon-magenta) !important; text-shadow: 0 0 5px rgba(255,0,255,0.4);}
+        .highlight-purple input { border-color: var(--neon-magenta) !important; color: var(--neon-magenta) !important;}
     </style>
 </head>
 <body>
@@ -245,7 +250,7 @@
         <div class="controls-card" id="timelineCard" style="display: none; padding: 15px;">
             <div style="color: var(--neon-yellow); font-family: 'Orbitron'; font-weight: bold; margin-bottom: 10px; font-size: 15px;">
                 📜 ROUTE TIMELINE (TRAPEZOIDAL PROFILE)
-                <span style="font-size: 11px; color:#aaa; font-weight: normal; margin-left:10px;">Nodes set Start/End Speed. Segments set Cruise Speed.</span>
+                <span style="font-size: 11px; color:#aaa; font-weight: normal; margin-left:10px;">Nodes set Speed IN/OUT. Segments set Cruise Speed.</span>
             </div>
             <div id="timelineContainer">
                 <!-- 动态生成的 Node 与 Path 交织列表 -->
@@ -269,15 +274,54 @@
         </div>
     </div>
 
+    <!-- 点位编辑弹窗 -->
+    <div id="pointModal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 id="modalTitle">WAYPOINT DATA</h3>
+            <div class="form-row">
+                <div class="form-group"><label id="lblXPos">X Pos (m):</label><input type="number" id="inputX" step="0.01"></div>
+                <div class="form-group"><label id="lblYPos">Y Pos (m):</label><input type="number" id="inputY" step="0.01"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group highlight-red"><label>Heading IN (°):</label><input type="number" id="inputHeading" step="0.1"></div>
+                <div class="form-group highlight-purple"><label>Heading OUT (°):</label><input type="number" id="inputHeadingOut" step="0.1" placeholder="Blank = Sync"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group highlight-green"><label>Spd IN (m/s):</label><input type="number" id="inputSpeedIn" step="0.1"></div>
+                <div class="form-group highlight-purple"><label>Spd OUT (m/s):</label><input type="number" id="inputSpeedOut" step="0.1" placeholder="Blank = Sync"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group highlight-yellow"><label>Chassis Rotation (°):</label><input type="number" id="inputRotation" step="0.1"></div>
+            </div>
+            <div class="form-group inline-checkbox" style="border-color: rgba(255, 42, 42, 0.4); margin-bottom: 5px;">
+                <input type="checkbox" id="inputIsStop" style="accent-color: var(--neon-red);">
+                <label for="inputIsStop" style="color:var(--neon-red) !important; text-shadow: 0 0 5px rgba(255,42,42,0.5);">🛑 Stop At End</label>
+            </div>
+            <div class="form-group inline-checkbox" style="border-color: rgba(0, 243, 255, 0.4);">
+                <input type="checkbox" id="inputDisconnectNext" style="accent-color: var(--neon-cyan);">
+                <label for="inputDisconnectNext" style="color:var(--neon-cyan) !important; text-shadow: 0 0 5px rgba(0,243,255,0.5);">✂️ Disconnect Next Path</label>
+            </div>
+            <div class="modal-actions" style="display:flex; justify-content: space-between; margin-top:15px;">
+                <button id="btnDeletePoint" class="btn-danger" onclick="deleteCurrentModalPoint()">DELETE</button>
+                <div style="display:flex; gap:5px;">
+                    <button class="btn-secondary" onclick="closeModal()">CANCEL</button>
+                    <button onclick="saveModalData()">APPLY</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const canvas = document.getElementById('fieldCanvas'); const ctx = canvas.getContext('2d'); const output = document.getElementById('outputCode'); const fieldSelect = document.getElementById('fieldSelect'); const robotLengthInput = document.getElementById('robotLength'); const robotWidthInput = document.getElementById('robotWidth'); const saveNameInput = document.getElementById('saveNameInput'); const savedPathsDropdown = document.getElementById('savedPathsDropdown'); const btnSimulate = document.getElementById('btnSimulate'); const statusTip = document.getElementById('statusTip');
         const curveWeightInput = document.getElementById('curveWeightInput'); const curveWeightSlider = document.getElementById('curveWeightSlider');
         const pidModal = document.getElementById('pidModal'); const pidP = document.getElementById('pidP'); const pidI = document.getElementById('pidI'); const pidD = document.getElementById('pidD');
         
+        const pointModal = document.getElementById('pointModal'); const modalTitle = document.getElementById('modalTitle'); const inputX = document.getElementById('inputX'); const inputY = document.getElementById('inputY'); const inputHeading = document.getElementById('inputHeading'); const inputHeadingOut = document.getElementById('inputHeadingOut'); const inputSpeedIn = document.getElementById('inputSpeedIn'); const inputSpeedOut = document.getElementById('inputSpeedOut'); const inputRotation = document.getElementById('inputRotation'); const inputIsStop = document.getElementById('inputIsStop'); const inputDisconnectNext = document.getElementById('inputDisconnectNext'); const btnDeletePoint = document.getElementById('btnDeletePoint');
+
         let FIELD_WIDTH = 17.55; let FIELD_HEIGHT = 8.05; 
         const LOCAL_STORAGE_KEY = "frc_architect_paths";
 
-        let keyWaypoints = []; let pathSegments = []; let hoveredIndex = -1; let isDragging = false; let draggedIndex = -1; let dragStartX = 0; let dragStartY = 0; let hasDragged = false; 
+        let keyWaypoints = []; let pathSegments = []; let hoveredIndex = -1; let activeEditIndex = -1; let isDragging = false; let draggedIndex = -1; let dragStartX = 0; let dragStartY = 0; let hasDragged = false; 
         let globalBrakePID = { p: 4.5, i: 0.1, d: 0.1 }; let globalCurveWeight = 0.4; 
         
         let isSimulating = false; let simPoints = []; let simTotalTime = 0; let simStartTime = 0; let animFrameId = null;
@@ -317,7 +361,26 @@
         function getSavedPathsObj() { return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "{}"); }
         function refreshSavedPathsDropdown() { let pathsObj = getSavedPathsObj(); savedPathsDropdown.innerHTML = '<option value="">-- DB LOAD --</option>'; for (let name in pathsObj) { let opt = document.createElement('option'); opt.value = name; opt.innerText = name; savedPathsDropdown.appendChild(opt); } }
         function savePathToLocal() { let name = saveNameInput.value.trim(); if (!name) return alert("请输入路线名称！"); let pathsObj = getSavedPathsObj(); pathsObj[name] = { waypoints: keyWaypoints, pid: globalBrakePID, curveWeight: globalCurveWeight }; localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(pathsObj)); refreshSavedPathsDropdown(); savedPathsDropdown.value = name; }
-        function loadPathFromLocal() { let name = savedPathsDropdown.value; if (!name) return; let data = getSavedPathsObj()[name]; if (data.waypoints) { keyWaypoints = data.waypoints; if (data.pid) globalBrakePID = data.pid; if (data.curveWeight) { globalCurveWeight = data.curveWeight; curveWeightInput.value = globalCurveWeight; curveWeightSlider.value = globalCurveWeight; } } else { keyWaypoints = data; } saveNameInput.value = name; renderRouteTimeline(); recalculatePath(); }
+        
+        function loadPathFromLocal() { 
+            let name = savedPathsDropdown.value; if (!name) return; let data = getSavedPathsObj()[name]; 
+            if (data.waypoints) { 
+                // 兼容旧版的 speed -> speedIn/Out
+                keyWaypoints = data.waypoints.map(pt => {
+                    if (pt.speedIn === undefined) {
+                        pt.speedIn = pt.speed !== undefined ? pt.speed : 0;
+                        pt.speedOut = pt.speed !== undefined ? pt.speed : 0;
+                    }
+                    return pt;
+                });
+                if (data.pid) globalBrakePID = data.pid; 
+                if (data.curveWeight) { globalCurveWeight = data.curveWeight; curveWeightInput.value = globalCurveWeight; curveWeightSlider.value = globalCurveWeight; } 
+            } else { 
+                keyWaypoints = data; 
+            } 
+            saveNameInput.value = name; renderRouteTimeline(); recalculatePath(); 
+        }
+
         function deletePathFromLocal() { let name = savedPathsDropdown.value; if (!name) return; if (confirm(`彻底删除缓存 [${name}]？`)) { let pathsObj = getSavedPathsObj(); delete pathsObj[name]; localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(pathsObj)); refreshSavedPathsDropdown(); if (saveNameInput.value === name) saveNameInput.value = ""; clearPoints(); } }
 
         async function bindProjectFolder() { try { targetDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); await saveDirHandleToDB(targetDirectoryHandle); document.getElementById('btnBindFolder').innerText = "✅ BOUND: " + targetDirectoryHandle.name; document.getElementById('btnBindFolder').style.backgroundColor = "rgba(0, 243, 255, 0.2)"; document.getElementById('folderStatus').innerText = "Export will write directly to this path."; document.getElementById('folderStatus').style.color = "#00f3ff"; } catch (err) { console.log("未绑定", err); } }
@@ -344,10 +407,71 @@
             await writeToFile(fileName, JSON.stringify(robotData, null, 2));
         }
 
-        function importJSON(event) { let file = event.target.files[0]; if (!file) return; let reader = new FileReader(); reader.onload = function(e) { try { let parsed = JSON.parse(e.target.result); if (parsed.waypoints) { keyWaypoints = parsed.waypoints; if (parsed.brakePID) globalBrakePID = parsed.brakePID; if (parsed.curveWeight) { globalCurveWeight = parsed.curveWeight; curveWeightInput.value = globalCurveWeight; curveWeightSlider.value = globalCurveWeight; } saveNameInput.value = parsed.name || file.name.replace(".json", ""); renderRouteTimeline(); recalculatePath(); event.target.value = ''; } else { alert("此 JSON 不包含所需数据！"); } } catch (err) { alert("JSON 解析失败！"); } }; reader.readAsText(file); }
+        function importJSON(event) { 
+            let file = event.target.files[0]; if (!file) return; let reader = new FileReader(); 
+            reader.onload = function(e) { 
+                try { 
+                    let parsed = JSON.parse(e.target.result); 
+                    if (parsed.waypoints) { 
+                        keyWaypoints = parsed.waypoints.map(pt => {
+                            if (pt.speedIn === undefined) { pt.speedIn = pt.speed !== undefined ? pt.speed : 0; pt.speedOut = pt.speed !== undefined ? pt.speed : 0; }
+                            return pt;
+                        });
+                        if (parsed.brakePID) globalBrakePID = parsed.brakePID; 
+                        if (parsed.curveWeight) { globalCurveWeight = parsed.curveWeight; curveWeightInput.value = globalCurveWeight; curveWeightSlider.value = globalCurveWeight; } 
+                        saveNameInput.value = parsed.name || file.name.replace(".json", ""); renderRouteTimeline(); recalculatePath(); event.target.value = ''; 
+                    } else { alert("此 JSON 不包含所需数据！"); } 
+                } catch (err) { alert("JSON 解析失败！"); } 
+            }; reader.readAsText(file); 
+        }
+
         function openPidModal() { pidP.value = globalBrakePID.p; pidI.value = globalBrakePID.i; pidD.value = globalBrakePID.d; pidModal.style.display = "flex"; }
         function closePidModal() { pidModal.style.display = "none"; }
         function savePidData() { globalBrakePID.p = parseFloat(pidP.value) || 0; globalBrakePID.i = parseFloat(pidI.value) || 0; globalBrakePID.d = parseFloat(pidD.value) || 0; closePidModal(); recalculatePath(); }
+
+        function openModalForNewPoint(x, y) { 
+            activeEditIndex = -1; modalTitle.innerText = "➕ ADD WAYPOINT"; inputX.value = x; inputY.value = y; 
+            inputHeading.value = 0.0; inputHeadingOut.value = ""; inputSpeedIn.value = 0.0; inputSpeedOut.value = ""; 
+            inputRotation.value = 0.0; inputIsStop.checked = (keyWaypoints.length === 0); inputDisconnectNext.checked = false; 
+            btnDeletePoint.style.display = "none"; pointModal.style.display = "flex"; 
+        }
+        function openModalForEdit(index) { 
+            activeEditIndex = index; modalTitle.innerText = `✏️ EDIT NODE [${index + 1}]`; let pt = keyWaypoints[index]; 
+            inputX.value = pt.x; inputY.value = pt.y; inputHeading.value = pt.heading; 
+            inputHeadingOut.value = (pt.headingOut !== undefined && pt.headingOut !== pt.heading) ? pt.headingOut : ""; 
+            inputSpeedIn.value = pt.speedIn !== undefined ? pt.speedIn : (pt.speed || 0);
+            inputSpeedOut.value = (pt.speedOut !== undefined && pt.speedOut !== pt.speedIn) ? pt.speedOut : "";
+            inputRotation.value = pt.rotation !== undefined ? pt.rotation : pt.heading; 
+            inputIsStop.checked = pt.isStop; inputDisconnectNext.checked = pt.disconnectNext === true; 
+            btnDeletePoint.style.display = "inline-block"; pointModal.style.display = "flex"; 
+        }
+        function closeModal() { pointModal.style.display = "none"; }
+        
+        function saveModalData() { 
+            let x = parseFloat(inputX.value); let y = parseFloat(inputY.value); 
+            let heading = parseFloat(inputHeading.value); let headingOut = parseFloat(inputHeadingOut.value); if (isNaN(headingOut)) headingOut = heading; 
+            let speedIn = parseFloat(inputSpeedIn.value); let speedOut = parseFloat(inputSpeedOut.value); if (isNaN(speedOut)) speedOut = speedIn;
+            let rotation = parseFloat(inputRotation.value); let isStop = inputIsStop.checked; let disconnectNext = inputDisconnectNext.checked;
+            
+            if (isNaN(x) || isNaN(y) || isNaN(heading) || isNaN(rotation) || isNaN(speedIn)) return alert("INVALID DATA"); 
+            let newPt = { 
+                x: parseFloat(Math.max(0, Math.min(FIELD_WIDTH, x)).toFixed(2)), y: parseFloat(Math.max(0, Math.min(FIELD_HEIGHT, y)).toFixed(2)), 
+                heading: parseFloat(heading.toFixed(1)), headingOut: parseFloat(headingOut.toFixed(1)), 
+                speedIn: parseFloat(speedIn.toFixed(2)), speedOut: parseFloat(speedOut.toFixed(2)),
+                rotation: parseFloat(rotation.toFixed(1)), isStop: isStop, disconnectNext: disconnectNext, 
+                maxAccel: 5.0, cruiseSpeed: 4.0, tensionOut: globalCurveWeight, tensionIn: globalCurveWeight, customTension: false 
+            }; 
+            if (activeEditIndex >= 0) {
+                newPt.maxAccel = keyWaypoints[activeEditIndex].maxAccel !== undefined ? keyWaypoints[activeEditIndex].maxAccel : 5.0;
+                newPt.cruiseSpeed = keyWaypoints[activeEditIndex].cruiseSpeed !== undefined ? keyWaypoints[activeEditIndex].cruiseSpeed : 4.0;
+                newPt.tensionOut = keyWaypoints[activeEditIndex].tensionOut !== undefined ? keyWaypoints[activeEditIndex].tensionOut : globalCurveWeight;
+                newPt.tensionIn = keyWaypoints[activeEditIndex].tensionIn !== undefined ? keyWaypoints[activeEditIndex].tensionIn : globalCurveWeight;
+                newPt.customTension = keyWaypoints[activeEditIndex].customTension !== undefined ? keyWaypoints[activeEditIndex].customTension : false;
+                keyWaypoints[activeEditIndex] = newPt; 
+            } else { keyWaypoints.push(newPt); }
+            closeModal(); renderRouteTimeline(); recalculatePath(); 
+        }
+        function deleteCurrentModalPoint() { if (activeEditIndex >= 0) { keyWaypoints.splice(activeEditIndex, 1); hoveredIndex = -1; closeModal(); renderRouteTimeline(); recalculatePath(); } }
 
         canvas.addEventListener('mousemove', function(event) { 
             if(isSimulating) return; const rect = canvas.getBoundingClientRect(); let fieldPos = getFieldCoords(event.clientX - rect.left, event.clientY - rect.top, rect); 
@@ -378,6 +502,7 @@
             if(isSimulating) return; 
             if (isDragging) { 
                 isDragging = false; canvas.style.cursor = (hoveredIndex !== -1) ? 'grab' : 'crosshair'; 
+                if (!hasDragged && draggedIndex !== -1) openModalForEdit(draggedIndex);
                 let card = document.getElementById(`node-card-${draggedIndex}`);
                 if(card) card.classList.remove('active');
                 draggedIndex = -1; 
@@ -387,7 +512,8 @@
         function addPoint(x, y) {
             let prevHeading = keyWaypoints.length > 0 ? keyWaypoints[keyWaypoints.length-1].heading : 0;
             let newPt = { 
-                x: x, y: y, heading: prevHeading, headingOut: prevHeading, rotation: prevHeading, speed: 0.0, 
+                x: x, y: y, heading: prevHeading, headingOut: prevHeading, rotation: prevHeading, 
+                speedIn: 0.0, speedOut: 0.0, 
                 isStop: keyWaypoints.length === 0, disconnectNext: false, 
                 maxAccel: 5.0, cruiseSpeed: 4.0, tensionOut: globalCurveWeight, tensionIn: globalCurveWeight, customTension: false 
             }; 
@@ -417,6 +543,10 @@
                 let isStopChecked = pt.isStop ? 'checked' : '';
                 let isDiscChecked = pt.disconnectNext ? 'checked' : '';
 
+                // Fallback for older saves
+                let sIn = pt.speedIn !== undefined ? pt.speedIn : (pt.speed || 0);
+                let sOut = pt.speedOut !== undefined ? pt.speedOut : sIn;
+
                 let nodeDiv = document.createElement('div');
                 nodeDiv.className = 'node-item';
                 nodeDiv.id = `node-card-${i}`;
@@ -438,8 +568,9 @@
                     <div class="timeline-controls" style="align-items: center;">
                         <div class="form-group"><label style="color:var(--neon-yellow)">Chassis Rot</label><input type="number" step="0.1" value="${pt.rotation !== undefined ? pt.rotation : pt.heading}" onchange="updateNodeData(${i}, 'rotation', this.value)" style="border-color:var(--neon-yellow); color:var(--neon-yellow);"></div>
                         
-                        <!-- 🚀 这里的 Speed 现在真正代表途径这个 Node 瞬间的目标速度 (Start/End Speed) -->
-                        <div class="form-group"><label>Node Spd (m/s)</label><input type="number" step="0.1" value="${pt.speed}" onchange="updateNodeData(${i}, 'speed', this.value)"></div>
+                        <!-- 🚀 这里的 Speed 被拆分成了 Spd IN 和 Spd OUT -->
+                        <div class="form-group"><label style="color:var(--neon-green)">Spd IN (m/s)</label><input type="number" step="0.1" value="${sIn}" onchange="updateNodeData(${i}, 'speedIn', this.value)" style="border-color:var(--neon-green); color:var(--neon-green);"></div>
+                        <div class="form-group"><label style="color:var(--neon-magenta)">Spd OUT (m/s)</label><input type="number" id="list-sout-${i}" step="0.1" value="${sOut}" onchange="updateNodeData(${i}, 'speedOut', this.value)" style="border-color:var(--neon-magenta); color:var(--neon-magenta);"></div>
                         
                         <label class="inline-checkbox" style="border-color: rgba(255, 42, 42, 0.4); margin-top:14px;">
                             <input type="checkbox" ${isStopChecked} onchange="updateNodeData(${i}, 'isStop', this.checked)"> 
@@ -469,7 +600,6 @@
                         </div>
                         <div class="timeline-controls">
                             <div class="form-group"><label>Accel (m/s²)</label><input type="number" step="0.1" value="${maxA}" onchange="updateNodeData(${i}, 'maxAccel', this.value)"></div>
-                            <!-- 🚀 新增：段内巡航限速 Cruise Speed -->
                             <div class="form-group"><label>Cruise Spd</label><input type="number" step="0.1" value="${cruise}" onchange="updateNodeData(${i}, 'cruiseSpeed', this.value)"></div>
                             <div class="form-group"><label>Tension OUT</label><input type="number" step="0.01" value="${tOut}" onchange="updateNodeData(${i}, 'tensionOut', this.value)"></div>
                             <div class="form-group"><label>Tension IN</label><input type="number" step="0.01" value="${tIn}" onchange="updateNodeData(${i}, 'tensionIn', this.value)"></div>
@@ -487,9 +617,15 @@
             } else {
                 let parsed = parseFloat(value);
                 if (!isNaN(parsed)) {
+                    // 同步 Heading OUT
                     if (key === 'heading' && pt.heading === pt.headingOut) {
                         pt.headingOut = parsed; let outInput = document.getElementById(`list-hout-${index}`); if(outInput) outInput.value = parsed;
                     }
+                    // 同步 Speed OUT
+                    if (key === 'speedIn' && pt.speedIn === pt.speedOut) {
+                        pt.speedOut = parsed; let soutInput = document.getElementById(`list-sout-${index}`); if(soutInput) soutInput.value = parsed;
+                    }
+
                     if (key === 'tensionOut' || key === 'tensionIn') { pt.customTension = true; }
                     pt[key] = parsed;
                 }
@@ -498,7 +634,7 @@
         }
 
         // ==========================================
-        // 🚀 核心重写：引入 3-Pass 梯形速度规划引擎
+        // 🚀 核心重写：引入 3-Pass 梯形速度规划引擎，连接 Speed OUT 到 Speed IN
         // ==========================================
         function recalculatePath() {
             pathSegments = []; simPoints = []; simTotalTime = 0; if (keyWaypoints.length === 0) { drawPoints(); generateJavaCode(); return; }
@@ -539,10 +675,12 @@
                 let size = tempSegmentPts.length;
                 let maxAccel = Math.max(0.1, Math.abs(p0.maxAccel !== undefined ? p0.maxAccel : 5.0));
                 let cruiseSpeed = p0.cruiseSpeed !== undefined ? p0.cruiseSpeed : 4.0;
-                let startSpeed = p0.speed; 
-                let endSpeed = p1.speed;
+                
+                // 🚀 起点速度读取 p0 的 Speed OUT，终点速度读取 p1 的 Speed IN
+                let startSpeed = p0.speedOut !== undefined ? p0.speedOut : (p0.speedIn || 0); 
+                let endSpeed = p1.speedIn !== undefined ? p1.speedIn : (p1.speed || 0);
 
-                // Pass 1: 正向推演 (加速天花板)
+                // Pass 1: 正向推演
                 let forwardProfile = new Array(size);
                 forwardProfile[0] = startSpeed;
                 for (let j = 1; j < size; j++) {
@@ -550,7 +688,7 @@
                     forwardProfile[j] = Math.sqrt(forwardProfile[j-1]**2 + 2 * maxAccel * ds);
                 }
 
-                // Pass 2: 反向推演 (刹车天花板)
+                // Pass 2: 反向推演
                 let backwardProfile = new Array(size);
                 backwardProfile[size-1] = endSpeed;
                 for (let j = size - 2; j >= 0; j--) {
@@ -558,12 +696,12 @@
                     backwardProfile[j] = Math.sqrt(backwardProfile[j+1]**2 + 2 * maxAccel * ds);
                 }
 
-                // Pass 3: 融合裁决 (梯形 / 三角形速度配置)
+                // Pass 3: 融合裁决
                 for (let j = 0; j < size; j++) {
                     tempSegmentPts[j].speed = Math.min(cruiseSpeed, forwardProfile[j], backwardProfile[j]);
                 }
 
-                // 🛑 PID 刹车接管结算与时间仿真
+                // 🛑 PID 刹车接管结算
                 for (let j = 0; j < size; j++) {
                     let pt = tempSegmentPts[j]; 
                     let calculatedTrapezoidalSpeed = pt.speed;
@@ -615,27 +753,21 @@
 
         function simulateSingleSegment(waypointIdx) {
             if (isSimulating) { isSimulating = false; cancelAnimationFrame(animFrameId); drawPoints(); }
-            
             let targetSeg = pathSegments.find(s => s.waypointIndex === waypointIdx);
             if (!targetSeg) return alert("Segment not connected!");
 
-            activeSimPoints = [];
-            let accTime = 0; let lastPt = null;
-            
+            activeSimPoints = []; let accTime = 0; let lastPt = null;
             for(let j=0; j < targetSeg.length; j++) {
                 let pt = targetSeg[j];
-                if(lastPt == null) {
-                    activeSimPoints.push({...pt, time: 0});
-                } else {
+                if(lastPt == null) { activeSimPoints.push({...pt, time: 0}); } 
+                else {
                     let realDist = Math.hypot(pt.x - lastPt.x, pt.y - lastPt.y); 
                     let avgSpeed = Math.max(0.1, (lastPt.speed + pt.speed) / 2); 
-                    accTime += (realDist / avgSpeed); 
-                    activeSimPoints.push({...pt, time: accTime});
+                    accTime += (realDist / avgSpeed); activeSimPoints.push({...pt, time: accTime});
                 }
                 lastPt = pt;
             }
-            activeSimTotalTime = accTime;
-            startSimLoop();
+            activeSimTotalTime = accTime; startSimLoop();
         }
 
         function simulateFrame(timestamp) { 
@@ -644,7 +776,6 @@
             let elapsed = (timestamp - simStartTime) / 1000.0; 
             
             if (elapsed > activeSimTotalTime) { toggleSimulation(); return; } 
-            
             statusTip.innerHTML = `⏱️ SIMULATING. TIME: <b style="color:var(--neon-cyan)">${elapsed.toFixed(2)}s</b> / ETA: <b style="color:var(--neon-cyan)">${activeSimTotalTime.toFixed(2)}s</b>`; 
             
             let currentRobotState = activeSimPoints[activeSimPoints.length - 1]; 
@@ -658,8 +789,7 @@
                     break; 
                 } 
             } 
-            drawSimulationFrame(currentRobotState, elapsed); 
-            animFrameId = requestAnimationFrame(simulateFrame); 
+            drawSimulationFrame(currentRobotState, elapsed); animFrameId = requestAnimationFrame(simulateFrame); 
         }
 
         function drawSimulationFrame(robotState, elapsed) { 
