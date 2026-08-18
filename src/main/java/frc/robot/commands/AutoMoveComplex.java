@@ -17,7 +17,7 @@ import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.units.Units;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj2.command.Command;
-
+import frc.robot.Constants.OperatorConstants;
 import frc.robot.generated.TunerConstants;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 
@@ -105,13 +105,13 @@ public class AutoMoveComplex extends Command {
         for (int i = 0; i < xArray.length; i++) {
             if (doInvertD) {
                 dArray[i] = 0.0 - dArray[i];
-                yArray[i] = 8.05 - yArray[i];
+                yArray[i] = OperatorConstants.fieldWidth - yArray[i];
             }
             if (doInvertA) {
                 dArray[i] = 180.0 - dArray[i];
                 while (dArray[i] > 180.0) dArray[i] -= 360.0;
                 while (dArray[i] < -180.0) dArray[i] += 360.0;
-                xArray[i] = 17.55 - xArray[i];
+                xArray[i] = OperatorConstants.fieldHeight - xArray[i];
             }
             if (isRed) {
                 dArray[i] -= 180.0;
