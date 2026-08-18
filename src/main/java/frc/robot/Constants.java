@@ -25,6 +25,9 @@ public final class Constants {
         public static final double fieldHeight=17.55;
 
     }
+    public static final class PassPlannerConstants{
+        public static final double defaultStartSpeed=2;
+    }
 
     public static final class DriveConstants {
         public static final double kPTranslation = 1.0;  // 位置到速度的比例系数

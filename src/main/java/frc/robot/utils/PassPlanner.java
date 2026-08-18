@@ -11,6 +11,7 @@ import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 
 import frc.robot.Constants.OperatorConstants;
+import frc.robot.Constants.PassPlannerConstants;
 import frc.robot.Constants.ReefTargetMap;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
 
@@ -389,7 +390,98 @@ public class PassPlanner {
             this.dynamicSpeedArray[i] = speedList.get(i);
         }
     }
-    
+    /**
+     * 🏎️ 【动态接管接口】从底盘当前物理状态（位置 + 速度向量）自动生成梯形速度规划的全局贝塞尔曲线
+     * @param endPose 终点坐标及目标朝向 (Heading IN 默认取 endPose 的 Rotation)
+     * @param cruiseSpeed 途中允许的最高巡航速度
+     * @param endSpeed 抵达目标点时的末端速度要求
+     * @param maxAccel 最大加速度 / 减速度限制
+     * @param tensionOut 离开当前点时的曲线张力
+     * @param tensionIn 进入目标点时的曲线张力
+     * @param invertXOnRed 红方时是否 X 轴对称反转
+     * @param invertYOnRed 红方时是否 Y 轴对称反转
+     */
+    public void generateUniversalBezierFromHere(Pose2d endPose, 
+                                                double cruiseSpeed, double endSpeed,double headingIn,
+                                                double maxAccel, 
+                                                double tensionOut, double tensionIn,
+                                                boolean invertXOnRed, boolean invertYOnRed) {
+        if (m_drivetrain == null) return;
+        
+        Optional<DriverStation.Alliance> alliance = DriverStation.getAlliance();
+        boolean isRed = alliance.isPresent() && alliance.get() == DriverStation.Alliance.Red;
+
+        // 1. 获取当前物理坐标
+        Pose2d currentPose = m_drivetrain.getState().Pose;
+        double startX = currentPose.getX();
+        double startY = currentPose.getY();
+
+        // 2. 获取绝对 Field-Centric 速度方向与大小
+        double robotVx = m_drivetrain.getState().Speeds.vxMetersPerSecond;
+        double robotVy = m_drivetrain.getState().Speeds.vyMetersPerSecond;
+        Rotation2d currentRot = currentPose.getRotation();
+
+        double fieldVx = robotVx * currentRot.getCos() - robotVy * currentRot.getSin();
+        double fieldVy = robotVx * currentRot.getSin() + robotVy * currentRot.getCos();
+
+        double currentActualSpeed = Math.hypot(fieldVx, fieldVy);
+        double currentMovingAngle = Math.toDegrees(Math.atan2(fieldVy, fieldVx));
+
+        // 3. 空间向量映射：将红方物理状态强行投影回蓝方宇宙
+        if (isRed) {
+            if (invertXOnRed) startX = OperatorConstants.fieldHeight - startX;
+            if (invertYOnRed) startY = OperatorConstants.fieldWidth - startY;
+            
+            if (invertXOnRed && invertYOnRed) {
+                currentMovingAngle -= 180.0;
+            } else if (invertXOnRed && !invertYOnRed) {
+                currentMovingAngle = 180.0 - currentMovingAngle;
+            } else if (!invertXOnRed && invertYOnRed) {
+                currentMovingAngle = -currentMovingAngle;
+            }
+            
+            while (currentMovingAngle > 180.0) currentMovingAngle -= 360.0;
+            while (currentMovingAngle < -180.0) currentMovingAngle += 360.0;
+        }
+
+        double endX = endPose.getX();
+        double endY = endPose.getY();
+       
+
+        double headingOut;
+        double realStartSpeed = Math.max(PassPlannerConstants.defaultStartSpeed,currentActualSpeed); // 起步速度直接锁定为当前真实物理速度
+
+        // 4. 动量保留判定与出弯朝向裁决
+        if (currentActualSpeed >= 1.0) {
+            // 速度大于 1m/s，遵循当前的物理惯性漂移方向出弯
+            headingOut = currentMovingAngle;
+        } else {
+            // 速度小于 1m/s (几乎静止)，不再遵循可能出现噪点的微小漂移角度，直接直指目标点！
+            headingOut = Math.toDegrees(Math.atan2(endY - startY, endX - startX));
+        }
+
+        ArrayList<Double> xList = new ArrayList<>();
+        ArrayList<Double> yList = new ArrayList<>();
+        ArrayList<Double> speedList = new ArrayList<>();
+        
+        // 5. 调用梯形速度引擎
+        generateBezierSegmentWithCruise(startX, startY, headingOut, endX, endY, headingIn, 
+                                        realStartSpeed, cruiseSpeed, endSpeed, maxAccel, 
+                                        tensionOut, tensionIn, 
+                                        xList, yList, speedList);
+
+        // 6. 覆盖到全局轨迹缓存，供 AutoMoveComplex 提取执行
+        int totalPoints = xList.size();
+        this.dynamicXArray = new double[totalPoints];
+        this.dynamicYArray = new double[totalPoints];
+        this.dynamicSpeedArray = new double[totalPoints];
+
+        for (int i = 0; i < totalPoints; i++) {
+            this.dynamicXArray[i] = xList.get(i);
+            this.dynamicYArray[i] = yList.get(i);
+            this.dynamicSpeedArray[i] = speedList.get(i);
+        }
+    }
     /**
      * 全局通用三阶贝塞尔曲线生成器 (蓝方宇宙映射版)
      */
@@ -716,11 +808,11 @@ public class PassPlanner {
     public Command CreatePathToLeftSupply() {
         return Commands.runOnce(() -> {
             aimAtLeftSupply = true;
-            generateUniversalBezier(
-                null, 
+            generateUniversalBezierFromHere(
+                
                 new Pose2d(1.6, 7.4, Rotation2d.fromDegrees(-53)), 
-                127, 3, 3, 
-                true, true // 中心对称
+                3., 2,127, 7,0.4,0.4, 
+                true, true 
             );
         });
     }
@@ -728,11 +820,11 @@ public class PassPlanner {
     public Command CreatePathToRightSupply() {
         return Commands.runOnce(() -> {
             aimAtRightSupply = true;
-            generateUniversalBezier(
-                null, 
-                new Pose2d(1.6, 0.65, Rotation2d.fromDegrees(53)), 
-                -127, 3, 3, 
-                true, true // 中心对称
+            generateUniversalBezierFromHere(
+                
+                new Pose2d(1.6, 0.65, Rotation2d.fromDegrees(-53)), 
+                3., 2,-127, 7,0.4,0.4, 
+                true, true 
             );
         });
     }
